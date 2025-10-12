@@ -1,0 +1,21 @@
+[project]
+name = "opt-portfolio"
+version = "0.1.0"
+description = "Portfolio Management System with VAA (Vigilant Asset Allocation) strategy and automated rebalancing"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.3.3",
+    "pandas>=2.3.2",
+    "selenium>=4.35.0",
+    "yfinance>=0.2.66",
+    "streamlit>=1.28.0",
+    "python-dateutil>=2.8.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
