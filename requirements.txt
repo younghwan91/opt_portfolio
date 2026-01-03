@@ -4,3 +4,4 @@ selenium>=4.35.0
 yfinance>=0.2.66
 streamlit>=1.28.0
 python-dateutil>=2.8.2
+duckdb>=1.1.0

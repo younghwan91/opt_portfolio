@@ -2,14 +2,17 @@ import yfinance as yf
 import pandas as pd
 from datetime import date
 from dateutil.relativedelta import relativedelta
+from data_cache import get_cache
 
-def get_performance(tickers, end_date_str):
+def get_performance(tickers, end_date_str, use_cache=True):
     """
     Calculates the periodic performance for a list of specified tickers as of a given date.
+    Now with smart DuckDB caching to avoid redundant data downloads!
 
     Args:
         tickers (list): A list of ticker symbols for which to calculate performance.
         end_date_str (str): The reference date for the performance calculation (in YYYY-MM-DD format).
+        use_cache (bool): Whether to use cached data (default: True). Set to False to force fresh download.
 
     Returns:
         pandas.DataFrame: A DataFrame containing the periodic returns for each ticker.
@@ -20,11 +23,18 @@ def get_performance(tickers, end_date_str):
     # Download data for the past 13 months to have a buffer.
     start_date = end_date - relativedelta(months=max(periods_in_months) + 1)
 
-    # --- 2. Download Data from Yahoo Finance ---
+    # --- 2. Download Data (with Smart Caching) ---
     try:
-        # 'Close' price is used for the calculation.
-        data = yf.download(tickers, start=start_date, end=end_date + pd.Timedelta(days=1), auto_adjust=True)
-        data = data['Close']
+        if use_cache:
+            # Use smart cache - only downloads missing data
+            cache = get_cache()
+            data = cache.get_incremental_data(tickers, start_date, end_date)
+        else:
+            # Force fresh download without caching
+            print("🔄 Forcing fresh download (cache bypassed)")
+            data = yf.download(tickers, start=start_date, end=end_date + pd.Timedelta(days=1), auto_adjust=True)
+            data = data['Close']
+        
         if data.empty:
             print("Could not download data. Please check the tickers or dates.")
             return pd.DataFrame()
