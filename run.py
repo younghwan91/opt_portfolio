@@ -2,13 +2,15 @@
 """
 Optimal Portfolio Management System - Main Entry Point
 
-This is the main entry point for the portfolio management system.
-Run this file to access the full menu of options.
+VAA (Vigilant Asset Allocation) 전략 기반 포트폴리오 관리 시스템
+동적 VAA 선택 + Sharpe Ratio 기반 비중 최적화 지원
 
 Usage:
-    python main.py          # Interactive menu
-    python main.py --web    # Launch web UI directly
-    python main.py --cli    # Launch CLI directly
+    python run.py              # Interactive menu
+    python run.py --web        # Launch web UI
+    python run.py --cli        # Launch CLI
+    python run.py --backtest   # Run dynamic backtest
+    python run.py --optimize   # Run optimization
 """
 
 import subprocess
@@ -44,20 +46,84 @@ def run_vaa_analysis():
     return result.selected_etf
 
 
-def run_backtest():
-    """Run strategy backtest."""
+def run_dynamic_backtest():
+    """Run dynamic VAA backtest with default weights."""
     from src.opt_portfolio.analysis.backtest import BacktestEngine
     
-    print("\n📈 Running Backtest...")
+    print("\n📈 Running Dynamic VAA Backtest...")
     engine = BacktestEngine()
-    results = engine.run_vaa_backtest(years=15)
-    engine.plot_results(results)
+    
+    # Get user input for years
+    try:
+        years_input = input("Enter backtest period in years (default 15): ").strip()
+        years = int(years_input) if years_input else 15
+    except ValueError:
+        years = 15
+    
+    result = engine.run_dynamic_vaa_backtest(years=years)
+    
+    # Optionally plot
+    show_plot = input("\nShow equity curve plot? (y/n, default n): ").strip().lower()
+    if show_plot == 'y':
+        engine.plot_results({'Dynamic VAA': result})
+    
+    return result
+
+
+def run_optimized_backtest():
+    """Run backtest with Sharpe Ratio optimization."""
+    from src.opt_portfolio.analysis.backtest import BacktestEngine
+    
+    print("\n🔬 Running Optimized Backtest...")
+    print("This will find the optimal portfolio weights based on Sharpe Ratio.")
+    
+    engine = BacktestEngine()
+    
+    # Get user input for years
+    try:
+        years_input = input("Enter backtest period in years (default 15): ").strip()
+        years = int(years_input) if years_input else 15
+    except ValueError:
+        years = 15
+    
+    result, opt_result = engine.run_optimized_backtest(years=years)
+    
+    print("\n" + opt_result.get_summary())
+    
+    # Optionally plot
+    show_plot = input("\nShow equity curve plot? (y/n, default n): ").strip().lower()
+    if show_plot == 'y':
+        engine.plot_results({'Optimized VAA': result})
+    
+    return result, opt_result
+
+
+def run_strategy_comparison():
+    """Run comparison of different VAA strategies."""
+    from src.opt_portfolio.analysis.backtest import BacktestEngine
+    
+    print("\n📊 Running VAA Strategy Comparison...")
+    engine = BacktestEngine()
+    
+    try:
+        years_input = input("Enter backtest period in years (default 15): ").strip()
+        years = int(years_input) if years_input else 15
+    except ValueError:
+        years = 15
+    
+    results = engine.run_vaa_backtest(years=years)
+    
+    # Plot comparison
+    show_plot = input("\nShow comparison plot? (y/n, default n): ").strip().lower()
+    if show_plot == 'y':
+        engine.plot_results(results)
+    
+    return results
 
 
 def plot_momentum():
     """Plot momentum history."""
     from src.opt_portfolio.strategies.momentum import MomentumAnalyzer
-    from src.opt_portfolio.utils.visualization import create_momentum_chart
     from src.opt_portfolio.config import ASSETS
     from datetime import date, timedelta
     import matplotlib.pyplot as plt
@@ -82,7 +148,17 @@ def plot_momentum():
     momentum_df = analyzer.calculate_historical_momentum(tickers, start_date, end_date)
     
     if not momentum_df.empty:
-        fig = create_momentum_chart(momentum_df, f"{title} Assets Momentum")
+        plt.figure(figsize=(12, 6))
+        for col in momentum_df.columns:
+            plt.plot(momentum_df.index, momentum_df[col], label=col, linewidth=2)
+        
+        plt.axhline(y=0, color='k', linestyle='-', alpha=0.3)
+        plt.title(f"{title} Assets Momentum History")
+        plt.xlabel('Date')
+        plt.ylabel('Momentum Score')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
         plt.show()
     else:
         print("No data available.")
@@ -119,6 +195,8 @@ def main():
     parser = argparse.ArgumentParser(description="Optimal Portfolio Management System")
     parser.add_argument("--web", action="store_true", help="Launch web UI")
     parser.add_argument("--cli", action="store_true", help="Launch CLI")
+    parser.add_argument("--backtest", action="store_true", help="Run dynamic backtest")
+    parser.add_argument("--optimize", action="store_true", help="Run optimization")
     args = parser.parse_args()
     
     if args.web:
@@ -129,23 +207,32 @@ def main():
         launch_cli()
         return
     
-    print("\n" + "=" * 50)
+    if args.backtest:
+        run_dynamic_backtest()
+        return
+    
+    if args.optimize:
+        run_optimized_backtest()
+        return
+    
+    print("\n" + "=" * 60)
     print("🚀 OPTIMAL PORTFOLIO MANAGEMENT SYSTEM")
-    print("=" * 50)
-    print("VAA Strategy with Advanced OU Forecasting")
-    print()
+    print("   VAA Strategy with Dynamic Selection & Weight Optimization")
+    print("=" * 60)
     
     while True:
         print("\nChoose an option:")
-        print("1. 🌐 Launch Web UI (Recommended)")
+        print("1. 🌐 Launch Web UI")
         print("2. 💻 Launch CLI")
         print("3. 📊 Quick VAA Analysis")
-        print("4. 📈 Run Backtest")
-        print("5. 📉 Plot Momentum History")
-        print("6. 💾 Cache Management")
-        print("7. ❌ Exit")
+        print("4. 📈 Run Dynamic VAA Backtest")
+        print("5. 🔬 Run Optimized Backtest (Sharpe Ratio)")
+        print("6. 📉 Compare VAA Strategies")
+        print("7. 📊 Plot Momentum History")
+        print("8. 💾 Cache Management")
+        print("9. ❌ Exit")
         
-        choice = input("\nEnter choice (1-7): ").strip()
+        choice = input("\nEnter choice (1-9): ").strip()
         
         if choice == "1":
             launch_web_ui()
@@ -154,12 +241,16 @@ def main():
         elif choice == "3":
             run_vaa_analysis()
         elif choice == "4":
-            run_backtest()
+            run_dynamic_backtest()
         elif choice == "5":
-            plot_momentum()
+            run_optimized_backtest()
         elif choice == "6":
-            cache_management()
+            run_strategy_comparison()
         elif choice == "7":
+            plot_momentum()
+        elif choice == "8":
+            cache_management()
+        elif choice == "9":
             print("\n👋 Goodbye!")
             break
         else:

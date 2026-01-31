@@ -2,11 +2,13 @@
 Backtesting Engine Module
 
 Provides comprehensive backtesting capabilities for portfolio strategies.
+Now supports dynamic VAA selection and portfolio weight optimization.
 
 퀀트 관점:
 - 백테스트는 전략 검증의 필수 단계
 - 과적합(overfitting) 주의: Out-of-sample 테스트 필요
 - 거래비용, 슬리피지 등 현실적 가정 포함
+- 동적 VAA 선택: 매월 모멘텀 기반 ETF 선택 변경
 """
 
 import pandas as pd
@@ -16,7 +18,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import date, timedelta
 from dataclasses import dataclass, field
 
-from ..config import BACKTEST, ASSETS, MOMENTUM, StrategyType
+from ..config import BACKTEST, ASSETS, MOMENTUM, StrategyType, AllocationConfig
 from ..core.cache import get_cache
 from ..strategies.momentum import MomentumAnalyzer
 from ..strategies.ou_process import OUForecaster
@@ -43,6 +45,12 @@ class BacktestResult:
     win_rate: float = 0.0
     defensive_ratio: float = 0.0
     
+    # VAA selection history
+    vaa_selections: List[str] = field(default_factory=list)
+    
+    # Allocation weights used
+    allocation_weights: Optional[Dict[str, float]] = None
+    
     def calculate_metrics(self, years: float):
         """Calculate all performance metrics."""
         self.total_return = (self.final_capital / self.initial_capital) - 1
@@ -60,23 +68,31 @@ class BacktestResult:
         winning_months = (self.returns > 0).sum()
         total_months = len(self.returns)
         self.win_rate = winning_months / total_months if total_months > 0 else 0
+    
+    def get_selection_summary(self) -> pd.Series:
+        """Get summary of VAA selections."""
+        if not self.vaa_selections:
+            return pd.Series()
+        return pd.Series(self.vaa_selections).value_counts(normalize=True)
 
 
 class BacktestEngine:
     """
-    Strategy backtesting engine.
+    Strategy backtesting engine with dynamic VAA and weight optimization.
     
     퀀트 조언:
     - 백테스트 기간은 최소 10년 (2개 이상의 경기 사이클)
     - Look-ahead bias 주의: 미래 데이터 사용 금지
     - Survivorship bias 주의: 상장폐지 종목 포함 필요
     - 거래비용 0.1%는 ETF 평균 수준
+    - 동적 VAA: 매월 모멘텀 기반으로 ETF 선택 변경
     """
     
     def __init__(
         self,
         initial_capital: float = BACKTEST.INITIAL_CAPITAL,
-        transaction_cost: float = BACKTEST.TRANSACTION_COST
+        transaction_cost: float = BACKTEST.TRANSACTION_COST,
+        allocation_config: Optional[AllocationConfig] = None
     ):
         """
         Initialize backtest engine.
@@ -84,12 +100,327 @@ class BacktestEngine:
         Args:
             initial_capital: Starting capital
             transaction_cost: Transaction cost as decimal
+            allocation_config: Optional custom allocation weights
         """
         self.initial_capital = initial_capital
         self.transaction_cost = transaction_cost
+        self.allocation_config = allocation_config or AllocationConfig()
         self.cache = get_cache()
         self.momentum_analyzer = MomentumAnalyzer(use_cache=True)
         self.forecaster = OUForecaster()
+    
+    def run_dynamic_vaa_backtest(
+        self,
+        years: int = BACKTEST.DEFAULT_YEARS,
+        allocation_weights: Optional[Dict[str, float]] = None
+    ) -> BacktestResult:
+        """
+        Run dynamic VAA backtest with mixed portfolio.
+        
+        동적 VAA 백테스트:
+        - 매월 VAA 로직으로 ETF 선택 (공격/방어 전환)
+        - 선택된 ETF에 VAA_WEIGHT 비중 배분
+        - 나머지는 SPY, TLT, GLD, BIL에 각각 배분
+        - 월간 리밸런싱
+        
+        Args:
+            years: Backtest period in years
+            allocation_weights: Custom weights (optional)
+            
+        Returns:
+            BacktestResult with comprehensive metrics
+        """
+        print(f"\n🚀 Starting Dynamic VAA Backtest ({years} years)")
+        print("=" * 60)
+        
+        # Setup weights
+        if allocation_weights:
+            weights = allocation_weights
+        else:
+            weights = {
+                'VAA': self.allocation_config.VAA_SELECTED_WEIGHT,
+                'SPY': self.allocation_config.SPY_WEIGHT,
+                'TLT': self.allocation_config.TLT_WEIGHT,
+                'GLD': self.allocation_config.GLD_WEIGHT,
+                'BIL': self.allocation_config.BIL_WEIGHT
+            }
+        
+        print(f"📊 Portfolio Weights:")
+        print(f"   VAA Selected: {weights['VAA']*100:.1f}%")
+        print(f"   SPY: {weights['SPY']*100:.1f}%")
+        print(f"   TLT: {weights['TLT']*100:.1f}%")
+        print(f"   GLD: {weights['GLD']*100:.1f}%")
+        print(f"   BIL: {weights['BIL']*100:.1f}%")
+        
+        # All tickers needed
+        agg_tickers = list(ASSETS.AGGRESSIVE_TICKERS)
+        prot_tickers = list(ASSETS.PROTECTIVE_TICKERS)
+        core_tickers = ['SPY', 'TLT', 'GLD', 'BIL']
+        all_tickers = list(set(agg_tickers + prot_tickers + core_tickers))
+        
+        end_date = pd.Timestamp.today()
+        start_date = end_date - pd.DateOffset(years=years)
+        fetch_start = start_date - pd.DateOffset(days=400)
+        
+        # Fetch data
+        print(f"\n📥 Fetching data for {all_tickers}...")
+        price_data = self.cache.get_incremental_data(all_tickers, fetch_start, end_date)
+        
+        if price_data.empty:
+            print("❌ No data found")
+            raise ValueError("No price data available")
+        
+        # Setup timeline
+        monthly_prices = price_data.resample('ME').last()
+        monthly_dates = monthly_prices.index[monthly_prices.index >= start_date]
+        
+        print(f"📅 Running backtest over {len(monthly_dates)} months...")
+        
+        # Initialize tracking
+        capital = self.initial_capital
+        equity_curve = [capital]
+        monthly_returns = []
+        transactions = []
+        vaa_selections = []
+        defensive_count = 0
+        dates_recorded = []
+        
+        # Run backtest
+        for i in range(len(monthly_dates) - 1):
+            rebal_date = monthly_dates[i]
+            next_date = monthly_dates[i + 1]
+            dates_recorded.append(next_date)
+            
+            # Get historical data up to rebalance date
+            hist_data = price_data.loc[:rebal_date]
+            
+            # Calculate momentum for VAA selection
+            agg_mom_df = self.momentum_analyzer.calculate_momentum_series(hist_data, agg_tickers)
+            if agg_mom_df.empty:
+                continue
+            
+            prot_mom_df = self.momentum_analyzer.calculate_momentum_series(hist_data, prot_tickers)
+            
+            # VAA Selection Logic: Any negative aggressive → go defensive
+            agg_current_scores = agg_mom_df.iloc[-1]
+            is_defensive = (agg_current_scores < 0).any()
+            
+            if is_defensive:
+                defensive_count += 1
+                # Select best protective asset
+                if not prot_mom_df.empty:
+                    prot_scores = prot_mom_df.iloc[-1]
+                    vaa_selected = prot_scores.idxmax()
+                else:
+                    vaa_selected = 'SHY'  # Default safe asset
+            else:
+                # Select best aggressive asset
+                vaa_selected = agg_current_scores.idxmax()
+            
+            vaa_selections.append(vaa_selected)
+            
+            # Calculate portfolio return for this month
+            price_start = monthly_prices.loc[rebal_date]
+            price_end = monthly_prices.loc[next_date]
+            
+            # VAA selected asset return
+            vaa_return = (price_end[vaa_selected] / price_start[vaa_selected]) - 1
+            
+            # Core assets return
+            portfolio_return = vaa_return * weights['VAA']
+            
+            for asset in ['SPY', 'TLT', 'GLD', 'BIL']:
+                if asset in price_start.index and asset in price_end.index:
+                    asset_return = (price_end[asset] / price_start[asset]) - 1
+                    portfolio_return += asset_return * weights[asset]
+            
+            # Apply transaction cost (simplified - assume rebalance each month)
+            portfolio_return -= self.transaction_cost
+            
+            # Update capital
+            capital *= (1 + portfolio_return)
+            equity_curve.append(capital)
+            monthly_returns.append(portfolio_return)
+            
+            transactions.append({
+                'date': next_date,
+                'vaa_selected': vaa_selected,
+                'mode': 'defensive' if is_defensive else 'aggressive',
+                'return': portfolio_return
+            })
+        
+        # Create result
+        equity_series = pd.Series(
+            equity_curve,
+            index=[monthly_dates[0]] + dates_recorded[:len(equity_curve)-1]
+        )
+        returns_series = pd.Series(
+            monthly_returns,
+            index=dates_recorded[:len(monthly_returns)]
+        )
+        
+        result = BacktestResult(
+            strategy_name=f"Dynamic VAA (VAA:{weights['VAA']*100:.0f}%)",
+            initial_capital=self.initial_capital,
+            final_capital=capital,
+            equity_curve=equity_series,
+            returns=returns_series,
+            transactions=transactions,
+            defensive_ratio=defensive_count / len(monthly_dates) if len(monthly_dates) > 0 else 0,
+            vaa_selections=vaa_selections,
+            allocation_weights=weights
+        )
+        result.calculate_metrics(years)
+        
+        # Print summary
+        self._print_dynamic_summary(result, years)
+        
+        return result
+    
+    def run_optimized_backtest(
+        self,
+        years: int = BACKTEST.DEFAULT_YEARS
+    ) -> Tuple[BacktestResult, 'OptimizationResult']:
+        """
+        Run backtest and optimize portfolio weights for best Sharpe Ratio.
+        
+        퀀트 조언:
+        - 2단계 최적화: 1) VAA 선택 수익률 계산 2) 비중 최적화
+        - 과적합 주의: 최적화 결과는 Out-of-sample에서 검증 필요
+        
+        Args:
+            years: Backtest period
+            
+        Returns:
+            Tuple of (BacktestResult with optimal weights, OptimizationResult)
+        """
+        from .optimizer import PortfolioOptimizer
+        
+        print(f"\n🔬 Starting Optimized Backtest ({years} years)")
+        print("=" * 60)
+        
+        # First, get VAA returns and core returns
+        vaa_returns, core_returns = self._get_component_returns(years)
+        
+        if vaa_returns.empty or core_returns.empty:
+            raise ValueError("Could not calculate component returns")
+        
+        # Optimize weights
+        optimizer = PortfolioOptimizer()
+        opt_result = optimizer.optimize(vaa_returns, core_returns)
+        
+        # Run backtest with optimized weights
+        result = self.run_dynamic_vaa_backtest(
+            years=years,
+            allocation_weights=opt_result.best_weights
+        )
+        
+        return result, opt_result
+    
+    def _get_component_returns(
+        self,
+        years: int
+    ) -> Tuple[pd.Series, pd.DataFrame]:
+        """
+        Get VAA selected asset returns and core asset returns separately.
+        
+        This is used for portfolio optimization.
+        """
+        print("📊 Calculating component returns for optimization...")
+        
+        agg_tickers = list(ASSETS.AGGRESSIVE_TICKERS)
+        prot_tickers = list(ASSETS.PROTECTIVE_TICKERS)
+        core_tickers = ['SPY', 'TLT', 'GLD', 'BIL']
+        all_tickers = list(set(agg_tickers + prot_tickers + core_tickers))
+        
+        end_date = pd.Timestamp.today()
+        start_date = end_date - pd.DateOffset(years=years)
+        fetch_start = start_date - pd.DateOffset(days=400)
+        
+        price_data = self.cache.get_incremental_data(all_tickers, fetch_start, end_date)
+        
+        if price_data.empty:
+            return pd.Series(), pd.DataFrame()
+        
+        monthly_prices = price_data.resample('ME').last()
+        monthly_dates = monthly_prices.index[monthly_prices.index >= start_date]
+        
+        vaa_returns = []
+        core_returns_list = []
+        dates = []
+        
+        for i in range(len(monthly_dates) - 1):
+            rebal_date = monthly_dates[i]
+            next_date = monthly_dates[i + 1]
+            
+            hist_data = price_data.loc[:rebal_date]
+            
+            # VAA Selection
+            agg_mom_df = self.momentum_analyzer.calculate_momentum_series(hist_data, agg_tickers)
+            if agg_mom_df.empty:
+                continue
+            
+            prot_mom_df = self.momentum_analyzer.calculate_momentum_series(hist_data, prot_tickers)
+            
+            agg_current_scores = agg_mom_df.iloc[-1]
+            is_defensive = (agg_current_scores < 0).any()
+            
+            if is_defensive:
+                if not prot_mom_df.empty:
+                    prot_scores = prot_mom_df.iloc[-1]
+                    vaa_selected = prot_scores.idxmax()
+                else:
+                    vaa_selected = 'SHY'
+            else:
+                vaa_selected = agg_current_scores.idxmax()
+            
+            # Calculate returns
+            price_start = monthly_prices.loc[rebal_date]
+            price_end = monthly_prices.loc[next_date]
+            
+            vaa_ret = (price_end[vaa_selected] / price_start[vaa_selected]) - 1
+            vaa_returns.append(vaa_ret)
+            
+            core_ret = {}
+            for asset in core_tickers:
+                if asset in price_start.index and asset in price_end.index:
+                    core_ret[asset] = (price_end[asset] / price_start[asset]) - 1
+            core_returns_list.append(core_ret)
+            
+            dates.append(next_date)
+        
+        vaa_series = pd.Series(vaa_returns, index=dates, name='VAA')
+        core_df = pd.DataFrame(core_returns_list, index=dates)
+        
+        return vaa_series, core_df
+    
+    def _print_dynamic_summary(self, result: BacktestResult, years: int):
+        """Print summary of dynamic VAA backtest."""
+        print("\n" + "=" * 70)
+        print("📊 DYNAMIC VAA BACKTEST RESULT")
+        print("=" * 70)
+        print(f"{'Metric':<25} | {'Value':<20}")
+        print("-" * 70)
+        print(f"{'Strategy':<25} | {result.strategy_name:<20}")
+        print(f"{'Period':<25} | {years} years")
+        print(f"{'Initial Capital':<25} | ${result.initial_capital:,.0f}")
+        print(f"{'Final Capital':<25} | ${result.final_capital:,.0f}")
+        print(f"{'Total Return':<25} | {result.total_return:.1%}")
+        print(f"{'CAGR':<25} | {result.cagr:.1%}")
+        print(f"{'Sharpe Ratio':<25} | {result.sharpe_ratio:.3f}")
+        print(f"{'Max Drawdown':<25} | {result.max_drawdown:.1%}")
+        print(f"{'Win Rate':<25} | {result.win_rate:.1%}")
+        print(f"{'Defensive Months':<25} | {result.defensive_ratio:.1%}")
+        
+        # VAA Selection breakdown
+        if result.vaa_selections:
+            print("\n📈 VAA Selection Distribution:")
+            selection_counts = pd.Series(result.vaa_selections).value_counts()
+            for ticker, count in selection_counts.items():
+                pct = count / len(result.vaa_selections) * 100
+                print(f"   {ticker}: {count} months ({pct:.1f}%)")
+        
+        print("=" * 70)
     
     def run_vaa_backtest(
         self,
@@ -147,6 +478,7 @@ class BacktestEngine:
         monthly_returns = {s: [] for s in strategies}
         transactions_log = {s: [] for s in strategies}
         defensive_counts = {s: 0 for s in strategies}
+        vaa_selections_log = {s: [] for s in strategies}
         
         dates_recorded = []
         
@@ -186,6 +518,7 @@ class BacktestEngine:
                     continue
                 
                 selected = scores.idxmax()
+                vaa_selections_log[strategy].append(selected)
                 
                 # Calculate return
                 price_start = monthly_prices.loc[rebal_date, selected]
@@ -223,7 +556,8 @@ class BacktestEngine:
                 equity_curve=equity_series,
                 returns=returns_series,
                 transactions=transactions_log[strategy],
-                defensive_ratio=defensive_counts[strategy] / len(monthly_dates) if len(monthly_dates) > 0 else 0
+                defensive_ratio=defensive_counts[strategy] / len(monthly_dates) if len(monthly_dates) > 0 else 0,
+                vaa_selections=vaa_selections_log[strategy]
             )
             result.calculate_metrics(years)
             results[strategy] = result

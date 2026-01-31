@@ -67,18 +67,23 @@ class AssetUniverse:
     })
 
 
-@dataclass(frozen=True)
+@dataclass
 class AllocationConfig:
     """
-    Target allocation percentages.
+    Target allocation percentages - now optimizable via Sharpe ratio optimization.
     
     퀀트 조언:
-    - 50% VAA 선택 자산: 전술적 배분으로 시장 타이밍
-    - 12.5% Core 자산: 전략적 배분으로 장기 성장 + 분산
-    - 이 배분은 백테스트상 Sharpe Ratio 최적화 결과
+    - 기본값 50%/12.5%는 Keller 원본 기반
+    - 최적화 시 Sharpe Ratio 기준으로 비율 조정 가능
+    - Core 자산 비중은 개별 조정 가능 (SPY, TLT, GLD, BIL)
     """
     VAA_SELECTED_WEIGHT: float = 0.50  # VAA로 선택된 ETF 비중
-    CORE_WEIGHT: float = 0.125  # 각 Core 자산의 비중
+    
+    # Core assets - 이제 개별 조정 가능
+    SPY_WEIGHT: float = 0.125
+    TLT_WEIGHT: float = 0.125
+    GLD_WEIGHT: float = 0.125
+    BIL_WEIGHT: float = 0.125
     
     # Error tolerance for rebalancing (%)
     REBALANCE_THRESHOLD: float = 5.0  # 5% 이상 벗어나면 리밸런싱
@@ -89,11 +94,40 @@ class AllocationConfig:
         """Generate target allocation percentages."""
         return {
             'selected': self.VAA_SELECTED_WEIGHT,
-            'SPY': self.CORE_WEIGHT,
-            'TLT': self.CORE_WEIGHT,
-            'GLD': self.CORE_WEIGHT,
-            'BIL': self.CORE_WEIGHT
+            'SPY': self.SPY_WEIGHT,
+            'TLT': self.TLT_WEIGHT,
+            'GLD': self.GLD_WEIGHT,
+            'BIL': self.BIL_WEIGHT
         }
+    
+    @property
+    def core_weights(self) -> Dict[str, float]:
+        """Get core asset weights as dictionary."""
+        return {
+            'SPY': self.SPY_WEIGHT,
+            'TLT': self.TLT_WEIGHT,
+            'GLD': self.GLD_WEIGHT,
+            'BIL': self.BIL_WEIGHT
+        }
+    
+    def validate(self) -> bool:
+        """Validate that allocations sum to 1.0."""
+        total = self.VAA_SELECTED_WEIGHT + self.SPY_WEIGHT + self.TLT_WEIGHT + self.GLD_WEIGHT + self.BIL_WEIGHT
+        return abs(total - 1.0) < 0.001
+    
+    @classmethod
+    def from_weights(cls, vaa: float, spy: float, tlt: float, gld: float, bil: float) -> 'AllocationConfig':
+        """Create config from explicit weights."""
+        config = cls(
+            VAA_SELECTED_WEIGHT=vaa,
+            SPY_WEIGHT=spy,
+            TLT_WEIGHT=tlt,
+            GLD_WEIGHT=gld,
+            BIL_WEIGHT=bil
+        )
+        if not config.validate():
+            raise ValueError(f"Weights must sum to 1.0, got {vaa + spy + tlt + gld + bil}")
+        return config
 
 
 @dataclass(frozen=True)
@@ -165,7 +199,7 @@ class CacheConfig:
     DEFAULT_CACHE_EXPIRY_DAYS: int = 30
 
 
-@dataclass(frozen=True)
+@dataclass
 class BacktestConfig:
     """
     Backtesting configuration.
@@ -179,6 +213,11 @@ class BacktestConfig:
     INITIAL_CAPITAL: float = 10000.0
     REBALANCE_FREQUENCY: str = "monthly"  # 'daily', 'weekly', 'monthly'
     TRANSACTION_COST: float = 0.001  # 0.1% 거래비용 (ETF 평균)
+    
+    # Optimization settings
+    OPTIMIZATION_WEIGHT_MIN: float = 0.05  # 최소 5% 비중
+    OPTIMIZATION_WEIGHT_MAX: float = 0.70  # 최대 70% 비중
+    OPTIMIZATION_STEP: float = 0.05  # 5% 단위로 최적화
 
 
 @dataclass(frozen=True)
