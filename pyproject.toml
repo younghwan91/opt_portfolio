@@ -1,22 +1,107 @@
 [project]
 name = "opt-portfolio"
-version = "0.1.0"
-description = "Portfolio Management System with VAA (Vigilant Asset Allocation) strategy and automated rebalancing"
+version = "1.0.0"
+description = "Professional Portfolio Management System with VAA (Vigilant Asset Allocation) strategy, Ornstein-Uhlenbeck forecasting, and automated rebalancing"
 readme = "README.md"
-requires-python = ">=3.13"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Portfolio Management Team"}
+]
+keywords = [
+    "portfolio",
+    "quant",
+    "trading",
+    "vaa",
+    "momentum",
+    "asset-allocation",
+    "backtest",
+    "finance"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
 dependencies = [
-    "numpy>=2.3.3",
-    "pandas>=2.3.2",
-    "selenium>=4.35.0",
-    "yfinance>=0.2.66",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "yfinance>=0.2.30",
     "streamlit>=1.28.0",
     "python-dateutil>=2.8.2",
-    "duckdb>=1.4.3",
+    "duckdb>=0.9.0",
+    "matplotlib>=3.7.0",
+    "plotly>=5.15.0",
+    "scipy>=1.10.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "flake8>=6.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/opt_portfolio"
+Documentation = "https://github.com/yourusername/opt_portfolio#readme"
+Repository = "https://github.com/yourusername/opt_portfolio.git"
+
+[project.scripts]
+opt-portfolio = "opt_portfolio.ui.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src/opt_portfolio"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=src/opt_portfolio --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["src/opt_portfolio"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
