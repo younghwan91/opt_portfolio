@@ -1,247 +1,246 @@
-# 🚀 Optimal Portfolio Management System
+# 🚀 최적 포트폴리오 관리 시스템
 
-A professional-grade quantitative portfolio management system implementing the **Vigilant Asset Allocation (VAA)** strategy with advanced **Ornstein-Uhlenbeck (OU) process forecasting**, automated rebalancing, and comprehensive risk analytics.
+**Vigilant Asset Allocation (VAA)** 전략과 **Ornstein-Uhlenbeck (OU) 프로세스 예측**을 기반으로 한 전문가급 정량화(퀀트) 포트폴리오 관리 시스템입니다. 자동 리밸런싱, 위험 분석, 백테스팅 기능을 제공합니다.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-## 📖 Table of Contents
+## 📖 목차
 
-- [Features](#-features)
-- [Project Structure](#-project-structure)
-- [Installation](#-installation)
-- [Quick Start](#-quick-start)
-- [Strategy Overview](#-strategy-overview)
-- [Quant Professional Insights](#-quant-professional-insights)
-- [API Reference](#-api-reference)
-- [Performance](#-performance)
-- [Contributing](#-contributing)
-
----
-
-## ✨ Features
-
-### Core Capabilities
-
-| Feature | Description |
-|---------|-------------|
-| 🔍 **VAA Selection** | Automated ETF selection based on multi-period momentum analysis |
-| 🔮 **OU Forecasting** | Mean-reversion modeling with Monte Carlo simulation |
-| ⚡ **Smart Caching** | DuckDB-powered incremental data fetching |
-| ⚖️ **Auto Rebalancing** | Integer share optimization with cash flow management |
-| 📊 **Risk Analytics** | Sharpe, Sortino, VaR, CVaR, Max Drawdown, and more |
-| 📈 **Backtesting** | Multi-strategy comparison with transaction costs |
-| 🌐 **Web UI** | Interactive Streamlit dashboard with Plotly charts |
-| 💻 **CLI** | Full-featured command-line interface |
-
-### Advanced Analytics
-
-- **Multi-Strategy Comparison**: Current, Forecast 1M/3M/6M, Delta (Momentum Velocity)
-- **Win Probability Calculation**: Monte Carlo-based probability of being the best performer
-- **Regime Analysis**: Up/Down market capture ratios
-- **Drawdown Analysis**: Top-N drawdown periods with recovery times
-- **Performance Attribution**: Year-by-year and market regime breakdown
+- [주요 기능](#-주요-기능)
+- [프로젝트 구조](#-프로젝트-구조)
+- [설치 방법](#-설치-방법)
+- [빠른 시작](#-빠른-시작)
+- [전략 개요](#-전략-개요)
+- [퀀트 전문가 인사이트](#-퀀트-전문가-인사이트)
+- [API 레퍼런스](#-api-레퍼런스)
+- [성과](#-성과)
+- [기여](#-기여)
 
 ---
 
-## 📁 Project Structure
+## ✨ 주요 기능
+
+### 핵심 기능
+
+| 기능 | 설명 |
+|------|------|
+| 🔍 **VAA 선택** | 다중 기간 모멘텀 분석 기반 자동 ETF 선택 |
+| 🔮 **OU 예측** | 평균 회귀 모델링 및 몬테카를로 시뮬레이션 |
+| ⚡ **스마트 캐싱** | DuckDB 기반 증분식 데이터 수집 |
+| ⚖️ **자동 리밸런싱** | 정수 주식 최적화 및 현금흐름 관리 |
+| 📊 **리스크 분석** | Sharpe, Sortino, VaR, CVaR, 최대낙폭 등 |
+| 📈 **백테스팅** | 다중 전략 비교 및 거래비용 포함 |
+| 🌐 **웹 UI** | Streamlit 대시보드 및 Plotly 차트 |
+| 💻 **CLI** | 완전한 명령줄 인터페이스 |
+
+### 고급 분석 기능
+
+- **다중 전략 비교**: 현재, 1M/3M/6M 예측, 모멘텀 변화율(Δ)
+- **승률 계산**: 최고 수익 자산이 될 확률 (몬테카를로 기반)
+- **시장 구간 분석**: 상승/하락 시장 수익 비율
+- **낙폭 분석**: 상위 낙폭 기간 및 회복 시간
+- **성과 분석**: 연도별 및 시장 구간별 세부 분석
+
+---
+
+## 📁 프로젝트 구조
 
 ```
 opt_portfolio/
-├── src/opt_portfolio/          # Main package
-│   ├── __init__.py            # Package initialization
-│   ├── config.py              # Configuration & constants
+├── src/opt_portfolio/          # 메인 패키지
+│   ├── __init__.py            # 패키지 초기화
+│   ├── config.py              # 설정 및 상수
 │   │
-│   ├── core/                  # Core modules
-│   │   ├── cache.py           # DuckDB caching system
-│   │   └── portfolio.py       # Portfolio management
+│   ├── core/                  # 핵심 모듈
+│   │   ├── cache.py           # DuckDB 캐싱 시스템
+│   │   └── portfolio.py       # 포트폴리오 관리
 │   │
-│   ├── strategies/            # Trading strategies
-│   │   ├── vaa.py            # VAA strategy implementation
-│   │   ├── momentum.py       # Momentum calculations
-│   │   └── ou_process.py     # OU process forecasting
+│   ├── strategies/            # 거래 전략
+│   │   ├── vaa.py            # VAA 전략 구현
+│   │   ├── momentum.py       # 모멘텀 계산
+│   │   └── ou_process.py     # OU 프로세스 예측
 │   │
-│   ├── analysis/              # Analytics modules
-│   │   ├── backtest.py       # Backtesting engine
-│   │   ├── risk.py           # Risk metrics
-│   │   └── performance.py    # Performance analysis
+│   ├── analysis/              # 분석 모듈
+│   │   ├── backtest.py       # 백테스팅 엔진
+│   │   ├── risk.py           # 리스크 지표
+│   │   └── performance.py    # 성과 분석
 │   │
-│   ├── ui/                    # User interfaces
-│   │   ├── streamlit_app.py  # Web UI
-│   │   └── cli.py            # Command-line interface
+│   ├── ui/                    # 사용자 인터페이스
+│   │   ├── streamlit_app.py  # 웹 UI
+│   │   └── cli.py            # 명령줄 인터페이스
 │   │
-│   └── utils/                 # Utilities
-│       ├── helpers.py        # Helper functions
-│       └── visualization.py  # Chart utilities
+│   └── utils/                 # 유틸리티
+│       ├── helpers.py        # 헬퍼 함수
+│       └── visualization.py  # 차트 유틸
 │
-├── tests/                     # Test suite
-├── docs/                      # Documentation
-├── run.py                     # Main entry point
-├── pyproject.toml            # Project configuration
-└── README.md                 # This file
+├── tests/                     # 테스트 스위트
+├── docs/                      # 문서
+├── run.py                     # 메인 진입점
+├── pyproject.toml            # 프로젝트 설정
+└── README.md                 # 이 파일
 ```
 
 ---
 
-## 🛠️ Installation
+## 🛠️ 설치 방법
 
-### Prerequisites
-- Python 3.10 or higher
-- pip package manager
+### 사전 요구사항
+- Python 3.10 이상
+- pip 패키지 매니저
 
-### Setup
-1. **Clone the repository:**
+### 설치 단계
+
+1. **저장소 클론:**
 ```bash
-git clone https://github.com/yourusername/opt_portfolio.git
+git clone https://github.com/younghwan91/opt_portfolio.git
 cd opt_portfolio
 ```
 
-2. **Create virtual environment (recommended):**
+2. **가상환경 생성 (권장):**
 ```bash
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
-# or
+# 또는
 venv\Scripts\activate     # Windows
 ```
 
-3. **Install dependencies:**
+3. **의존성 설치:**
 ```bash
 pip install -e .
-# or for development
+# 또는 개발 모드
 pip install -e ".[dev]"
 ```
 
-4. **Verify installation:**
+4. **설치 확인:**
 ```bash
 python run.py
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 빠른 시작
 
-### Option 1: Web UI (Recommended)
+### 방법 1: 웹 UI (권장)
 
 ```bash
 python run.py --web
-# or
+# 또는
 streamlit run src/opt_portfolio/ui/streamlit_app.py
 ```
 
-### Option 2: Command Line Interface
+### 방법 2: 명령줄 인터페이스
 
 ```bash
 python run.py --cli
 ```
 
-### Option 3: Python API
+### 방법 3: Python API
 
 ```python
 from opt_portfolio.strategies.vaa import VAAStrategy
 from opt_portfolio.core.portfolio import Portfolio
 from opt_portfolio.analysis.backtest import BacktestEngine
 
-# Run VAA Analysis
+# VAA 분석 실행
 vaa = VAAStrategy(use_forecasting=True)
 result = vaa.select()
-print(f"Selected ETF: {result.selected_etf}")
-print(f"Mode: {'Defensive' if result.is_defensive else 'Growth'}")
+print(f"선택된 ETF: {result.selected_etf}")
+print(f"시장 모드: {'방어' if result.is_defensive else '성장'}")
 
-# Calculate win probabilities
+# 승률 계산
 win_probs, forecast = vaa.get_win_probabilities(months=1)
-print(f"Win Probabilities:\n{win_probs}")
+print(f"승률:\n{win_probs}")
 ```
 
-### Legacy Interfaces (Still Available)
+### 레거시 인터페이스 (여전히 사용 가능)
 
-- **VAA analysis only**: `python vaa_agg.py`
-- **Rebalancing calculator**: `python rebalance.py`
-- **Backtest Comparison**: `python backtest_comparison.py`
+- **VAA 분석만**: `python vaa_agg.py`
+- **리밸런싱 계산기**: `python rebalance.py`
+- **백테스트 비교**: `python backtest_comparison.py`
 
 ---
 
-## 📊 Strategy Overview
+## 📊 전략 개요
 
 ### VAA (Vigilant Asset Allocation)
 
-VAA is a tactical asset allocation strategy developed by **Wouter Keller** (2017).
+VAA는 **Wouter Keller**가 2017년에 개발한 전술적 자산배분 전략입니다.
 
-#### Asset Universes
+#### 자산군
 
-| Universe | Assets | Purpose |
-|----------|--------|---------|
-| **Aggressive** | SPY, EFA, EEM, AGG | Growth during bull markets |
-| **Protective** | LQD, IEF, SHY | Capital preservation during corrections |
-| **Core Holdings** | SPY, TLT, GLD, BIL | Permanent strategic allocation |
+| 자산군 | ETF | 용도 |
+|--------|-----|------|
+| **공격형** | SPY, EFA, EEM, AGG | 강세장에서의 성장 |
+| **방어형** | LQD, IEF, SHY | 약세장에서의 자본 보호 |
+| **핵심 자산** | SPY, TLT, GLD, BIL | 전략적 항상 보유 |
 
-#### Target Allocation
+#### 목표 배분
 
 ```
 ┌─────────────────────────────────────────┐
 │                                         │
 │    ┌─────────────────────┐              │
-│    │  VAA Selected ETF   │    50%       │
-│    │    (Tactical)       │              │
+│    │  VAA 선택 ETF      │    50%        │
+│    │   (전술적 배분)    │              │
 │    └─────────────────────┘              │
 │                                         │
 │    ┌─────┬─────┬─────┬─────┐            │
-│    │ SPY │ TLT │ GLD │ BIL │  12.5% each│
+│    │ SPY │ TLT │ GLD │ BIL │  각 12.5%  │
 │    │     │     │     │     │            │
 │    └─────┴─────┴─────┴─────┘            │
-│          (Core Holdings)                │
+│         (핵심 자산)                      │
 │                                         │
 └─────────────────────────────────────────┘
 ```
 
-#### Momentum Formula
+#### 모멘텀 공식
 
-The weighted momentum score formula:
+가중 모멘텀 점수 계산:
 
-```
-Momentum Score = 12 × r_1m + 4 × r_3m + 2 × r_6m + 1 × r_12m
-```
+$$\text{Momentum Score} = 12 \times r_{1m} + 4 \times r_{3m} + 2 \times r_{6m} + 1 \times r_{12m}$$
 
-Where `r_nm` = n-month return (%)
+여기서 $r_{nm}$ = n개월 수익률(%)
 
-#### Selection Logic
+#### 선택 로직
 
 ```python
-IF any(Aggressive Momentum < 0):
-    Mode = DEFENSIVE
-    Select = argmax(Protective Momentum)
+IF any(공격형 모멘텀 < 0):
+    모드 = 방어
+    선택 = argmax(방어형 모멘텀)
 ELSE:
-    Mode = GROWTH
-    Select = argmax(Aggressive Momentum)
+    모드 = 성장
+    선택 = argmax(공격형 모멘텀)
 ```
 
-### 🔮 Advanced Forecasting & Backtesting
+### 🔮 고급 예측 및 백테스팅
 
-The system now includes a sophisticated forecasting engine:
+정교한 예측 엔진이 포함되어 있습니다:
 
-| Strategy | Description | 15-Year Return |
-|----------|-------------|----------------|
-| **Standard VAA** | Selects asset with highest *current* score | **+114.6%** |
-| **Forecast (1-Month)** | Selects asset with highest *predicted* score next month | **+173.7%** |
-| **Velocity (Delta)** | Selects asset with highest *increase* in momentum | **+201.3%** |
-| **Forecast (3-Month)** | Selects asset with highest *predicted* score in 3 months | **+238.8%** |
-| **Forecast (6-Month)** | Selects asset with highest *predicted* score in 6 months | **+242.2%** |
+| 전략 | 설명 | 15년 수익률 |
+|------|------|-----------|
+| **표준 VAA** | 현재 점수가 최고인 자산 선택 | **+114.6%** |
+| **1개월 예측** | 다음달 점수 예측으로 선택 | **+173.7%** |
+| **모멘텀 변화(Δ)** | 모멘텀 증가율이 최고인 자산 선택 | **+201.3%** |
+| **3개월 예측** | 3개월 후 점수 예측으로 선택 | **+238.8%** |
+| **6개월 예측** | 6개월 후 점수 예측으로 선택 | **+242.2%** |
 
-*Note: Past performance does not guarantee future results.*
+*주의: 과거 성과가 미래를 보장하지 않습니다.*
 
 ---
 
-## 🎓 Quant Professional Insights
+## 🎓 퀀트 전문가 인사이트
 
-### 1. 모멘텀의 학술적 배경 (Academic Foundation of Momentum)
+### 1. 모멘텀의 학술적 배경
 
 모멘텀은 학술적으로 가장 강력하게 검증된 시장 이상현상(market anomaly) 중 하나입니다.
 
-> **"Winners continue to win, losers continue to lose"** - Jegadeesh & Titman (1993)
+> **"승자는 계속 승리하고, 패자는 계속 패배한다"** - Jegadeesh & Titman (1993)
 
-**VAA의 가중치 (12, 4, 2, 1) 근거:**
-- 모멘텀의 반감기(half-life)는 약 3-6개월
+**VAA 가중치 (12, 4, 2, 1) 근거:**
+- 모멘텀의 반감기(half-life): 약 3-6개월
 - 단기 모멘텀에 높은 가중치 → 빠른 시장 반응
 - 장기 모멘텀 포함 → 노이즈 필터링
 
@@ -249,24 +248,22 @@ The system now includes a sophisticated forecasting engine:
 
 모멘텀 점수는 장기적으로 0 주변으로 회귀하는 경향이 있습니다.
 
-```
-dX_t = θ(μ - X_t)dt + σdW_t
-```
+$$dX_t = \theta(\mu - X_t)dt + \sigma dW_t$$
 
-| Parameter | Meaning | Typical Range |
-|-----------|---------|---------------|
-| θ (theta) | Mean reversion speed | 0.001 - 0.1 |
-| μ (mu) | Long-term mean | ~ 0 |
-| σ (sigma) | Volatility | Asset-dependent |
+| 파라미터 | 의미 | 전형적 범위 |
+|---------|------|-----------|
+| θ (theta) | 평균 회귀 속도 | 0.001 - 0.1 |
+| μ (mu) | 장기 평균 | ~ 0 |
+| σ (sigma) | 변동성 | 자산별 |
 
 **캘리브레이션 (Calibration):**
 AR(1) 회귀를 통해 파라미터 추정:
-- `β = e^(-θ)`
-- `α = μ(1 - β)`
+- $\beta = e^{-\theta}$
+- $\alpha = \mu(1 - \beta)$
 
-### 3. 리밸런싱 최적화 (Rebalancing Optimization)
+### 3. 리밸런싱 최적화
 
-**정수 주식 제약 (Integer Constraint):**
+**정수 주식 제약:**
 - 완벽한 목표 배분은 불가능
 - 우선순위: 큰 편차부터 교정
 - 매도 후 매수 순서로 현금 흐름 최적화
@@ -280,42 +277,42 @@ AR(1) 회귀를 통해 파라미터 추정:
 | **월별** | **비용 효율적** | **약간의 추적 오차** |
 | 분기별 | 최소 비용 | 큰 편차 가능 |
 
-### 4. 리스크 지표 해석 (Risk Metrics Interpretation)
+### 4. 리스크 지표 해석
 
-| 지표 | 좋음 (Good) | 보통 (Average) | 주의 (Warning) |
+| 지표 | 좋음 | 보통 | 주의 |
 |------|------|------|------|
 | Sharpe Ratio | > 2.0 | 1.0 - 2.0 | < 1.0 |
-| Max Drawdown | < 15% | 15-25% | > 25% |
+| 최대낙폭 | < 15% | 15-25% | > 25% |
 | Calmar Ratio | > 1.5 | 1.0 - 1.5 | < 1.0 |
-| Win Rate | > 60% | 50-60% | < 50% |
+| 승률 | > 60% | 50-60% | < 50% |
 
-### 5. 백테스트 주의사항 (Backtesting Caveats)
+### 5. 백테스트 주의사항
 
 ⚠️ **과적합 (Overfitting) 경고:**
 - In-sample 성과 ≠ Out-of-sample 성과
 - 파라미터 최적화 → 과적합 위험
 - Walk-forward 분석 권장
 
-⚠️ **Survivorship Bias:**
+⚠️ **생존 편향 (Survivorship Bias):**
 - 상장폐지된 종목 누락 → 성과 과대평가
 - ETF는 상대적으로 안전
 
-⚠️ **Look-Ahead Bias:**
+⚠️ **미래 정보 누설 (Look-Ahead Bias):**
 - 미래 데이터 사용 → 비현실적 성과
 - 월말 가격만 사용 (조정 종가)
 
-### 6. 실전 적용 가이드 (Practical Implementation Guide)
+### 6. 실전 적용 가이드
 
 **최소 자본금 권장:**
 ```
-$10,000 이상 (allocation error < 3%)
-$50,000 이상 (allocation error < 1%)
+$10,000 이상 (배분 오차 < 3%)
+$50,000 이상 (배분 오차 < 1%)
 ```
 
 **거래 비용:**
 - ETF 스프레드: ~0.01%
-- 커미션: $0 (대부분의 브로커)
-- 총 예상 비용: ~0.1% per rebalance
+- 수수료: $0 (대부분 브로커)
+- 총 예상 비용: 리밸런싱당 ~0.1%
 
 **세금 고려:**
 - 월별 리밸런싱 → 단기 양도소득
@@ -323,7 +320,7 @@ $50,000 이상 (allocation error < 1%)
 
 ---
 
-## 📚 API Reference
+## 📚 API 레퍼런스
 
 ### VAAStrategy
 
@@ -337,10 +334,10 @@ vaa = VAAStrategy(
     use_forecasting=True
 )
 
-# Run selection
+# 선택 실행
 result = vaa.select(calculation_date=date.today())
 
-# Get win probabilities
+# 승률 계산
 win_probs, forecast_df = vaa.get_win_probabilities(months=1)
 ```
 
@@ -352,10 +349,10 @@ from opt_portfolio.core.portfolio import Portfolio
 portfolio = Portfolio.from_dict({'SPY': 100, 'TLT': 50})
 portfolio.update_prices()
 
-# Get current allocation
+# 현재 배분 조회
 allocation = portfolio.get_allocation()
 
-# Calculate rebalance
+# 리밸런싱 계산
 recommendations = portfolio.calculate_rebalance(
     selected_etf='AGG',
     additional_cash=10000
@@ -388,70 +385,66 @@ print(analyzer.get_risk_report(metrics))
 
 ---
 
-## 🛠️ Dependencies
+## 🛠️ 의존성
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| **numpy** | ≥1.24.0 | Numerical computations |
-| **pandas** | ≥2.0.0 | Data manipulation and analysis |
-| **yfinance** | ≥0.2.36 | Real-time financial data |
-| **streamlit** | ≥1.28.0 | Web UI framework |
-| **plotly** | ≥5.18.0 | Interactive charts |
-| **duckdb** | ≥0.9.0 | Fast columnar caching |
-| **scipy** | ≥1.11.0 | Statistical analysis |
-
----
-
-## 🚨 Important Notes
-
-- **📊 Data Source**: Uses Yahoo Finance API for real-time pricing
-- **🕐 Market Hours**: Best results during market hours for accurate pricing
-- **🔄 Rebalancing Frequency**: Recommend monthly rebalancing
-- **⚠️ Risk Disclaimer**: This is educational software, not financial advice
+| 패키지 | 버전 | 용도 |
+|--------|------|------|
+| **numpy** | ≥1.24.0 | 수치 계산 |
+| **pandas** | ≥2.0.0 | 데이터 조작 및 분석 |
+| **yfinance** | ≥0.2.36 | 실시간 금융 데이터 |
+| **streamlit** | ≥1.28.0 | 웹 UI 프레임워크 |
+| **plotly** | ≥5.18.0 | 인터랙티브 차트 |
+| **duckdb** | ≥0.9.0 | 고속 칼럼 캐싱 |
+| **scipy** | ≥1.11.0 | 통계 분석 |
 
 ---
 
-## 🤝 Contributing
+## 🚨 중요 사항
 
-Contributions are welcome! Please feel free to submit pull requests or open issues for:
-- 🐛 Bug fixes
-- ✨ New features  
-- 📚 Documentation improvements
-- 🧪 Additional testing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+- **📊 데이터 출처**: Yahoo Finance API로 실시간 가격 수집
+- **🕐 시장 시간**: 정확한 가격을 위해 시장 시간 중 사용 권장
+- **🔄 리밸런싱 주기**: 월 1회 권장
+- **⚠️ 위험 고지**: 이 소프트웨어는 교육용이며 재정 조언이 아닙니다
 
 ---
 
-## ⚠️ Disclaimer
+## 🤝 기여
 
-**This software is for educational and research purposes only.**
+버그 수정, 새 기능, 문서 개선, 추가 테스트에 대한 Pull Request를 환영합니다!
 
-- Past performance does not guarantee future results
-- Investing involves risk of loss
-- Always consult a qualified financial advisor
-- The authors are not responsible for any financial losses
-
----
-
-## 📜 License
-
-This project is open source and available under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+1. 저장소를 Fork합니다
+2. Feature 브랜치를 생성합니다 (`git checkout -b feature/AmazingFeature`)
+3. 변경사항을 커밋합니다 (`git commit -m 'Add some AmazingFeature'`)
+4. 브랜치에 Push합니다 (`git push origin feature/AmazingFeature`)
+5. Pull Request를 오픈합니다
 
 ---
 
-## 🙏 Acknowledgments
+## ⚠️ 면책 조항
 
-- Wouter Keller for the VAA strategy framework
-- Yahoo Finance for market data
-- The open-source community for amazing tools
+**이 소프트웨어는 교육 및 연구 목적으로만 제공됩니다.**
+
+- 과거 성과가 미래를 보장하지 않습니다
+- 투자는 손실의 위험이 있습니다
+- 항상 자격 있는 재정 고문과 상담하세요
+- 저자는 재정 손실에 대해 책임지지 않습니다
 
 ---
 
-*Built with ❤️ for quantitative investors*
+## 📜 라이선스
 
-**🎯 Ready to optimize your portfolio?** Start with `python run.py` and choose your preferred interface!
+이 프로젝트는 오픈소스이며 **MIT 라이선스** 하에 제공됩니다. [LICENSE](LICENSE) 파일을 참고하세요.
+
+---
+
+## 🙏 감사의 말
+
+- Wouter Keller (VAA 전략 프레임워크)
+- Yahoo Finance (시장 데이터)
+- 오픈소스 커뮤니티 (훌륭한 도구들)
+
+---
+
+*❤️로 정량화(퀀트) 투자자를 위해 제작됨*
+
+**🎯 포트폴리오를 최적화할 준비가 되셨나요?** `python run.py`를 실행하고 원하는 인터페이스를 선택하세요!
