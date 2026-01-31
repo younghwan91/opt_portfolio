@@ -1,6 +1,6 @@
-# 🚀 최적 포트폴리오 관리 시스템
+# 🚀 최적 포트폴리오 관리 시스템 v2.0
 
-**Vigilant Asset Allocation (VAA)** 전략과 **Ornstein-Uhlenbeck (OU) 프로세스 예측**을 기반으로 한 전문가급 정량화(퀀트) 포트폴리오 관리 시스템입니다. 자동 리밸런싱, 위험 분석, 백테스팅 기능을 제공합니다.
+**동적 VAA (Vigilant Asset Allocation) 전략 + Sharpe Ratio 기반 비중 최적화**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -9,40 +9,157 @@
 
 ## 📖 목차
 
-- [주요 기능](#-주요-기능)
+- [새로운 기능 (v2.0)](#-새로운-기능-v20)
+- [핵심 개선사항](#-핵심-개선사항)
 - [프로젝트 구조](#-프로젝트-구조)
 - [설치 방법](#-설치-방법)
 - [빠른 시작](#-빠른-시작)
-- [전략 개요](#-전략-개요)
-- [퀀트 전문가 인사이트](#-퀀트-전문가-인사이트)
+- [동적 VAA 백테스팅](#-동적-vaa-백테스팅)
+- [비중 최적화](#-비중-최적화)
 - [API 레퍼런스](#-api-레퍼런스)
-- [성과](#-성과)
-- [기여](#-기여)
+- [테스트](#-테스트)
+- [변경 이력](#-변경-이력)
 
 ---
 
-## ✨ 주요 기능
+## 🎉 새로운 기능 (v2.0)
 
-### 핵심 기능
+### 1. 동적 VAA 선택 (Dynamic VAA Selection)
 
-| 기능 | 설명 |
-|------|------|
-| 🔍 **VAA 선택** | 다중 기간 모멘텀 분석 기반 자동 ETF 선택 |
-| 🔮 **OU 예측** | 평균 회귀 모델링 및 몬테카를로 시뮬레이션 |
-| ⚡ **스마트 캐싱** | DuckDB 기반 증분식 데이터 수집 |
-| ⚖️ **자동 리밸런싱** | 정수 주식 최적화 및 현금흐름 관리 |
-| 📊 **리스크 분석** | Sharpe, Sortino, VaR, CVaR, 최대낙폭 등 |
-| 📈 **백테스팅** | 다중 전략 비교 및 거래비용 포함 |
-| 🌐 **웹 UI** | Streamlit 대시보드 및 Plotly 차트 |
-| 💻 **CLI** | 완전한 명령줄 인터페이스 |
+**기존 문제점:**
+- 고정된 50% VAA 비중으로만 백테스트 가능
+- 매월 어떤 ETF가 선택되는지 추적 불가
 
-### 고급 분석 기능
+**새로운 해결책:**
+```python
+from src.opt_portfolio.analysis.backtest import BacktestEngine
 
-- **다중 전략 비교**: 현재, 1M/3M/6M 예측, 모멘텀 변화율(Δ)
-- **승률 계산**: 최고 수익 자산이 될 확률 (몬테카를로 기반)
-- **시장 구간 분석**: 상승/하락 시장 수익 비율
-- **낙폭 분석**: 상위 낙폭 기간 및 회복 시간
-- **성과 분석**: 연도별 및 시장 구간별 세부 분석
+engine = BacktestEngine()
+result = engine.run_dynamic_vaa_backtest(years=15)
+
+# VAA 선택 이력 확인
+print(result.get_selection_summary())
+# 출력 예시:
+# SPY    35%
+# AGG    25%
+# IEF    20%
+# EFA    15%
+# SHY     5%
+```
+
+**특징:**
+- ✅ 매월 모멘텀 기반으로 공격형/방어형 ETF 자동 선택
+- ✅ 선택 이력 추적 및 분석
+- ✅ 방어 모드 비율 계산
+- ✅ 월간 리밸런싱 시뮬레이션
+
+### 2. Sharpe Ratio 기반 비중 최적화
+
+**기존 문제점:**
+- 50% / 12.5% / 12.5% / 12.5% / 12.5% 고정 비중
+- 최적 배분 비율을 찾을 방법 없음
+
+**새로운 해결책:**
+```python
+from src.opt_portfolio.analysis.backtest import BacktestEngine
+
+engine = BacktestEngine()
+result, optimization = engine.run_optimized_backtest(years=15)
+
+# 최적 비중 출력
+print(optimization.get_summary())
+# 출력 예시:
+# 🎯 Optimal Allocation:
+#    VAA Selected: 45.0%
+#    SPY: 15.0%
+#    TLT: 20.0%
+#    GLD: 10.0%
+#    BIL: 10.0%
+#
+# 📈 Performance Metrics:
+#    Sharpe Ratio: 1.523
+#    Annual Return: 12.45%
+#    Annual Volatility: 8.17%
+#    Max Drawdown: 15.32%
+```
+
+**특징:**
+- ✅ 그리드 서치로 전역 최적해 탐색
+- ✅ Sharpe Ratio 최대화 목표
+- ✅ 제약 조건: 비중 합 = 100%, 최소 5% ~ 최대 70%
+- ✅ 상위 5개 조합 분석 제공
+
+### 3. 유연한 비중 설정
+
+**기존 문제점:**
+- `AllocationConfig`가 `frozen=True`로 수정 불가
+- 커스텀 비중 테스트 불가능
+
+**새로운 해결책:**
+```python
+from src.opt_portfolio.config import AllocationConfig
+
+# 방법 1: 팩토리 메서드
+custom_config = AllocationConfig.from_weights(
+    vaa=0.40, spy=0.15, tlt=0.20, gld=0.15, bil=0.10
+)
+
+# 방법 2: 직접 생성
+config = AllocationConfig(
+    VAA_SELECTED_WEIGHT=0.45,
+    SPY_WEIGHT=0.15,
+    TLT_WEIGHT=0.20,
+    GLD_WEIGHT=0.10,
+    BIL_WEIGHT=0.10
+)
+
+# 유효성 검증
+assert config.validate()  # 합이 1.0인지 확인
+```
+
+**특징:**
+- ✅ 각 자산별 개별 비중 설정 가능
+- ✅ 자동 검증 (합이 100%인지 확인)
+- ✅ 백테스트 엔진에 직접 주입 가능
+
+---
+
+## 🔧 핵심 개선사항
+
+### 코드 정리 (Cleanup)
+
+**삭제된 중복 파일:**
+- ❌ `vaa_agg.py` → `src/opt_portfolio/strategies/vaa.py`로 통합
+- ❌ `port_ratio_calculator.py` → `src/opt_portfolio/core/portfolio.py`로 통합
+- ❌ `rebalance.py` → 기능이 백테스트 엔진에 포함됨
+- ❌ `backtest_comparison.py` → 새로운 백테스트 엔진으로 대체
+- ❌ `portfolio_ui.py` → `src/opt_portfolio/ui/streamlit_app.py` 사용
+- ❌ `integrated_portfolio.py` → CLI로 통합
+- ❌ `main.py` → `run.py`로 통합
+
+**결과:**
+- 📦 7개 레거시 파일 제거
+- 🎯 명확한 단일 진입점 (`run.py`)
+- 📚 체계적인 패키지 구조
+
+### 새로운 모듈
+
+#### `src/opt_portfolio/analysis/optimizer.py`
+
+포트폴리오 비중 최적화 엔진
+
+**주요 클래스:**
+- `PortfolioOptimizer`: 그리드 서치 기반 최적화
+- `OptimizationResult`: 최적화 결과 컨테이너
+
+**주요 메서드:**
+```python
+class PortfolioOptimizer:
+    def generate_weight_combinations(self) -> List[Dict[str, float]]
+    def calculate_portfolio_returns(self, vaa_returns, core_returns, weights)
+    def calculate_sharpe_ratio(self, returns) -> Tuple[float, float, float]
+    def optimize(self, vaa_returns, core_returns) -> OptimizationResult
+```
 
 ---
 
@@ -50,37 +167,37 @@
 
 ```
 opt_portfolio/
+├── run.py                      # 🚀 메인 진입점 (리팩토링됨)
+├── test_manual.py              # 🧪 수동 테스트 스크립트
+│
 ├── src/opt_portfolio/          # 메인 패키지
-│   ├── __init__.py            # 패키지 초기화
-│   ├── config.py              # 설정 및 상수
+│   ├── config.py              # ⚙️ 설정 (개선: 동적 비중 지원)
 │   │
 │   ├── core/                  # 핵심 모듈
-│   │   ├── cache.py           # DuckDB 캐싱 시스템
+│   │   ├── cache.py           # DuckDB 캐싱
 │   │   └── portfolio.py       # 포트폴리오 관리
 │   │
 │   ├── strategies/            # 거래 전략
-│   │   ├── vaa.py            # VAA 전략 구현
+│   │   ├── vaa.py            # VAA 전략
 │   │   ├── momentum.py       # 모멘텀 계산
 │   │   └── ou_process.py     # OU 프로세스 예측
 │   │
 │   ├── analysis/              # 분석 모듈
-│   │   ├── backtest.py       # 백테스팅 엔진
+│   │   ├── backtest.py       # 🆕 백테스트 엔진 (대폭 개선)
+│   │   ├── optimizer.py      # 🆕 비중 최적화 엔진
 │   │   ├── risk.py           # 리스크 지표
 │   │   └── performance.py    # 성과 분석
 │   │
 │   ├── ui/                    # 사용자 인터페이스
 │   │   ├── streamlit_app.py  # 웹 UI
-│   │   └── cli.py            # 명령줄 인터페이스
+│   │   └── cli.py            # CLI
 │   │
 │   └── utils/                 # 유틸리티
-│       ├── helpers.py        # 헬퍼 함수
-│       └── visualization.py  # 차트 유틸
+│       ├── helpers.py
+│       └── visualization.py
 │
-├── tests/                     # 테스트 스위트
-├── docs/                      # 문서
-├── run.py                     # 메인 진입점
-├── pyproject.toml            # 프로젝트 설정
-└── README.md                 # 이 파일
+└── tests/                      # 테스트 스위트
+    └── test_config.py         # 🆕 설정 테스트
 ```
 
 ---
@@ -89,33 +206,25 @@ opt_portfolio/
 
 ### 사전 요구사항
 - Python 3.10 이상
-- pip 패키지 매니저
+- 의존성 패키지 (requirements.txt)
 
 ### 설치 단계
 
-1. **저장소 클론:**
 ```bash
+# 1. 저장소 클론
 git clone https://github.com/younghwan91/opt_portfolio.git
 cd opt_portfolio
-```
 
-2. **가상환경 생성 (권장):**
-```bash
+# 2. 가상환경 생성 (권장)
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # 또는
 venv\Scripts\activate     # Windows
-```
 
-3. **의존성 설치:**
-```bash
-pip install -e .
-# 또는 개발 모드
-pip install -e ".[dev]"
-```
+# 3. 의존성 설치
+pip install -r requirements.txt
 
-4. **설치 확인:**
-```bash
+# 4. 설치 확인
 python run.py
 ```
 
@@ -123,307 +232,477 @@ python run.py
 
 ## 🚀 빠른 시작
 
-### 방법 1: 웹 UI (권장)
+### 1. 인터랙티브 메뉴
 
 ```bash
+python run.py
+```
+
+메뉴가 표시됩니다:
+```
+🚀 OPTIMAL PORTFOLIO MANAGEMENT SYSTEM
+   VAA Strategy with Dynamic Selection & Weight Optimization
+============================================================
+
+Choose an option:
+1. 🌐 Launch Web UI
+2. 💻 Launch CLI
+3. 📊 Quick VAA Analysis
+4. 📈 Run Dynamic VAA Backtest
+5. 🔬 Run Optimized Backtest (Sharpe Ratio)
+6. 📉 Compare VAA Strategies
+7. 📊 Plot Momentum History
+8. 💾 Cache Management
+9. ❌ Exit
+```
+
+### 2. 명령줄 옵션
+
+```bash
+# 웹 UI 실행
 python run.py --web
-# 또는
-streamlit run src/opt_portfolio/ui/streamlit_app.py
+
+# 동적 VAA 백테스트 (15년)
+python run.py --backtest
+
+# Sharpe Ratio 최적화
+python run.py --optimize
 ```
-
-### 방법 2: 명령줄 인터페이스
-
-```bash
-python run.py --cli
-```
-
-### 방법 3: Python API
-
-```python
-from opt_portfolio.strategies.vaa import VAAStrategy
-from opt_portfolio.core.portfolio import Portfolio
-from opt_portfolio.analysis.backtest import BacktestEngine
-
-# VAA 분석 실행
-vaa = VAAStrategy(use_forecasting=True)
-result = vaa.select()
-print(f"선택된 ETF: {result.selected_etf}")
-print(f"시장 모드: {'방어' if result.is_defensive else '성장'}")
-
-# 승률 계산
-win_probs, forecast = vaa.get_win_probabilities(months=1)
-print(f"승률:\n{win_probs}")
-```
-
-### 레거시 인터페이스 (여전히 사용 가능)
-
-- **VAA 분석만**: `python vaa_agg.py`
-- **리밸런싱 계산기**: `python rebalance.py`
-- **백테스트 비교**: `python backtest_comparison.py`
 
 ---
 
-## 📊 전략 개요
+## 📈 동적 VAA 백테스팅
 
-### VAA (Vigilant Asset Allocation)
-
-VAA는 **Wouter Keller**가 2017년에 개발한 전술적 자산배분 전략입니다.
-
-#### 자산군
-
-| 자산군 | ETF | 용도 |
-|--------|-----|------|
-| **공격형** | SPY, EFA, EEM, AGG | 강세장에서의 성장 |
-| **방어형** | LQD, IEF, SHY | 약세장에서의 자본 보호 |
-| **핵심 자산** | SPY, TLT, GLD, BIL | 전략적 항상 보유 |
-
-#### 목표 배분
-
-```
-┌─────────────────────────────────────────┐
-│                                         │
-│    ┌─────────────────────┐              │
-│    │  VAA 선택 ETF      │    50%        │
-│    │   (전술적 배분)    │              │
-│    └─────────────────────┘              │
-│                                         │
-│    ┌─────┬─────┬─────┬─────┐            │
-│    │ SPY │ TLT │ GLD │ BIL │  각 12.5%  │
-│    │     │     │     │     │            │
-│    └─────┴─────┴─────┴─────┘            │
-│         (핵심 자산)                      │
-│                                         │
-└─────────────────────────────────────────┘
-```
-
-#### 모멘텀 공식
-
-가중 모멘텀 점수 계산:
-
-$$\text{Momentum Score} = 12 \times r_{1m} + 4 \times r_{3m} + 2 \times r_{6m} + 1 \times r_{12m}$$
-
-여기서 $r_{nm}$ = n개월 수익률(%)
-
-#### 선택 로직
+### 기본 사용법
 
 ```python
-IF any(공격형 모멘텀 < 0):
-    모드 = 방어
-    선택 = argmax(방어형 모멘텀)
-ELSE:
-    모드 = 성장
-    선택 = argmax(공격형 모멘텀)
+from src.opt_portfolio.analysis.backtest import BacktestEngine
+
+# 1. 엔진 생성
+engine = BacktestEngine()
+
+# 2. 동적 VAA 백테스트 실행 (기본 비중)
+result = engine.run_dynamic_vaa_backtest(years=15)
+
+# 3. 결과 확인
+print(f"CAGR: {result.cagr:.2%}")
+print(f"Sharpe Ratio: {result.sharpe_ratio:.3f}")
+print(f"Max Drawdown: {result.max_drawdown:.2%}")
+
+# 4. VAA 선택 이력
+selection_summary = result.get_selection_summary()
+print(selection_summary)
 ```
 
-### 🔮 고급 예측 및 백테스팅
+### 커스텀 비중으로 백테스트
 
-정교한 예측 엔진이 포함되어 있습니다:
+```python
+# 커스텀 비중 정의
+custom_weights = {
+    'VAA': 0.40,    # VAA 선택 자산 40%
+    'SPY': 0.15,    # S&P 500  15%
+    'TLT': 0.20,    # 장기 국채 20%
+    'GLD': 0.15,    # 금 15%
+    'BIL': 0.10     # 단기 국채 10%
+}
 
-| 전략 | 설명 | 15년 수익률 |
-|------|------|-----------|
-| **표준 VAA** | 현재 점수가 최고인 자산 선택 | **+114.6%** |
-| **1개월 예측** | 다음달 점수 예측으로 선택 | **+173.7%** |
-| **모멘텀 변화(Δ)** | 모멘텀 증가율이 최고인 자산 선택 | **+201.3%** |
-| **3개월 예측** | 3개월 후 점수 예측으로 선택 | **+238.8%** |
-| **6개월 예측** | 6개월 후 점수 예측으로 선택 | **+242.2%** |
+# 백테스트 실행
+result = engine.run_dynamic_vaa_backtest(
+    years=15,
+    allocation_weights=custom_weights
+)
+```
 
-*주의: 과거 성과가 미래를 보장하지 않습니다.*
+### 결과 분석
+
+```python
+# 기본 메트릭
+print(f"Initial Capital: ${result.initial_capital:,.0f}")
+print(f"Final Capital: ${result.final_capital:,.0f}")
+print(f"Total Return: {result.total_return:.2%}")
+print(f"CAGR: {result.cagr:.2%}")
+print(f"Sharpe Ratio: {result.sharpe_ratio:.3f}")
+print(f"Volatility: {result.volatility:.2%}")
+print(f"Max Drawdown: {result.max_drawdown:.2%}")
+print(f"Calmar Ratio: {result.calmar_ratio:.3f}")
+print(f"Win Rate: {result.win_rate:.2%}")
+print(f"Defensive Ratio: {result.defensive_ratio:.2%}")
+
+# VAA 선택 분포
+selection_counts = pd.Series(result.vaa_selections).value_counts()
+print("\nVAA Selection Distribution:")
+for ticker, count in selection_counts.items():
+    pct = count / len(result.vaa_selections) * 100
+    print(f"  {ticker}: {count} months ({pct:.1f}%)")
+
+# 차트 그리기
+engine.plot_results({'Dynamic VAA': result})
+```
 
 ---
 
-## 🎓 퀀트 전문가 인사이트
+## 🔬 비중 최적화
 
-### 1. 모멘텀의 학술적 배경
+### Sharpe Ratio 최적화
 
-모멘텀은 학술적으로 가장 강력하게 검증된 시장 이상현상(market anomaly) 중 하나입니다.
+```python
+from src.opt_portfolio.analysis.backtest import BacktestEngine
 
-> **"승자는 계속 승리하고, 패자는 계속 패배한다"** - Jegadeesh & Titman (1993)
+# 1. 엔진 생성
+engine = BacktestEngine()
 
-**VAA 가중치 (12, 4, 2, 1) 근거:**
-- 모멘텀의 반감기(half-life): 약 3-6개월
-- 단기 모멘텀에 높은 가중치 → 빠른 시장 반응
-- 장기 모멘텀 포함 → 노이즈 필터링
+# 2. 최적화 백테스트 실행
+result, optimization = engine.run_optimized_backtest(years=15)
 
-### 2. OU 프로세스 (Ornstein-Uhlenbeck Process)
+# 3. 최적 비중 확인
+print(optimization.get_summary())
 
-모멘텀 점수는 장기적으로 0 주변으로 회귀하는 경향이 있습니다.
+# 4. 상위 5개 조합 확인
+top5 = optimization.all_results.head(5)
+print("\nTop 5 Weight Combinations:")
+print(top5[['VAA', 'SPY', 'TLT', 'GLD', 'BIL', 'sharpe_ratio']])
 
-$$dX_t = \theta(\mu - X_t)dt + \sigma dW_t$$
-
-| 파라미터 | 의미 | 전형적 범위 |
-|---------|------|-----------|
-| θ (theta) | 평균 회귀 속도 | 0.001 - 0.1 |
-| μ (mu) | 장기 평균 | ~ 0 |
-| σ (sigma) | 변동성 | 자산별 |
-
-**캘리브레이션 (Calibration):**
-AR(1) 회귀를 통해 파라미터 추정:
-- $\beta = e^{-\theta}$
-- $\alpha = \mu(1 - \beta)$
-
-### 3. 리밸런싱 최적화
-
-**정수 주식 제약:**
-- 완벽한 목표 배분은 불가능
-- 우선순위: 큰 편차부터 교정
-- 매도 후 매수 순서로 현금 흐름 최적화
-
-**권장 리밸런싱 주기:**
-
-| 주기 | 장점 | 단점 |
-|------|------|------|
-| 일별 | 최적 추적 | 거래비용 과다 |
-| 주별 | 균형 | 노이즈 거래 |
-| **월별** | **비용 효율적** | **약간의 추적 오차** |
-| 분기별 | 최소 비용 | 큰 편차 가능 |
-
-### 4. 리스크 지표 해석
-
-| 지표 | 좋음 | 보통 | 주의 |
-|------|------|------|------|
-| Sharpe Ratio | > 2.0 | 1.0 - 2.0 | < 1.0 |
-| 최대낙폭 | < 15% | 15-25% | > 25% |
-| Calmar Ratio | > 1.5 | 1.0 - 1.5 | < 1.0 |
-| 승률 | > 60% | 50-60% | < 50% |
-
-### 5. 백테스트 주의사항
-
-⚠️ **과적합 (Overfitting) 경고:**
-- In-sample 성과 ≠ Out-of-sample 성과
-- 파라미터 최적화 → 과적합 위험
-- Walk-forward 분석 권장
-
-⚠️ **생존 편향 (Survivorship Bias):**
-- 상장폐지된 종목 누락 → 성과 과대평가
-- ETF는 상대적으로 안전
-
-⚠️ **미래 정보 누설 (Look-Ahead Bias):**
-- 미래 데이터 사용 → 비현실적 성과
-- 월말 가격만 사용 (조정 종가)
-
-### 6. 실전 적용 가이드
-
-**최소 자본금 권장:**
-```
-$10,000 이상 (배분 오차 < 3%)
-$50,000 이상 (배분 오차 < 1%)
+# 5. 최적 설정 저장
+optimal_config = optimization.optimal_config
 ```
 
-**거래 비용:**
-- ETF 스프레드: ~0.01%
-- 수수료: $0 (대부분 브로커)
-- 총 예상 비용: 리밸런싱당 ~0.1%
+### 수동 최적화
 
-**세금 고려:**
-- 월별 리밸런싱 → 단기 양도소득
-- 세금 이연 계좌 활용 권장 (IRA, 401k 등)
+```python
+from src.opt_portfolio.analysis.optimizer import PortfolioOptimizer
+
+# 1. 컴포넌트 수익률 계산 (VAA 선택 + 핵심 자산)
+vaa_returns, core_returns = engine._get_component_returns(years=15)
+
+# 2. 옵티마이저 생성
+optimizer = PortfolioOptimizer(
+    weight_min=0.05,   # 최소 5%
+    weight_max=0.70,   # 최대 70%
+    weight_step=0.05,  # 5% 단위
+    risk_free_rate=0.05
+)
+
+# 3. 최적화 실행
+opt_result = optimizer.optimize(vaa_returns, core_returns)
+
+# 4. 결과 확인
+print(f"Best Sharpe: {opt_result.best_sharpe:.3f}")
+print(f"Best Weights: {opt_result.best_weights}")
+```
+
+### 최적화 제약 조건
+
+**기본 설정:**
+- VAA 비중: 20% ~ 70%
+- 핵심 자산 비중: 5% ~ 35%
+- 합계: 정확히 100%
+- 그리드 단위: 5%
+
+**커스터마이징:**
+```python
+optimizer = PortfolioOptimizer(
+    weight_min=0.10,   # 최소 10%
+    weight_max=0.60,   # 최대 60%
+    weight_step=0.10,  # 10% 단위 (더 빠름)
+    risk_free_rate=0.04
+)
+```
 
 ---
 
 ## 📚 API 레퍼런스
 
-### VAAStrategy
+### AllocationConfig
 
 ```python
-from opt_portfolio.strategies.vaa import VAAStrategy
+from src.opt_portfolio.config import AllocationConfig
 
-vaa = VAAStrategy(
-    aggressive_tickers=['SPY', 'EFA', 'EEM', 'AGG'],
-    protective_tickers=['LQD', 'IEF', 'SHY'],
-    use_cache=True,
-    use_forecasting=True
+# 기본 생성
+config = AllocationConfig()
+
+# 커스텀 비중
+config = AllocationConfig.from_weights(
+    vaa=0.45, spy=0.15, tlt=0.15, gld=0.15, bil=0.10
 )
 
-# 선택 실행
-result = vaa.select(calculation_date=date.today())
+# 속성
+config.VAA_SELECTED_WEIGHT  # float
+config.SPY_WEIGHT           # float
+config.TLT_WEIGHT           # float
+config.GLD_WEIGHT           # float
+config.BIL_WEIGHT           # float
 
-# 승률 계산
-win_probs, forecast_df = vaa.get_win_probabilities(months=1)
-```
-
-### Portfolio
-
-```python
-from opt_portfolio.core.portfolio import Portfolio
-
-portfolio = Portfolio.from_dict({'SPY': 100, 'TLT': 50})
-portfolio.update_prices()
-
-# 현재 배분 조회
-allocation = portfolio.get_allocation()
-
-# 리밸런싱 계산
-recommendations = portfolio.calculate_rebalance(
-    selected_etf='AGG',
-    additional_cash=10000
-)
+# 메서드
+config.validate()           # bool: 비중 합이 1.0인지 확인
+config.target_allocations   # Dict[str, float]: 모든 비중
+config.core_weights         # Dict[str, float]: 핵심 자산만
 ```
 
 ### BacktestEngine
 
 ```python
-from opt_portfolio.analysis.backtest import BacktestEngine
+from src.opt_portfolio.analysis.backtest import BacktestEngine
 
+# 생성
 engine = BacktestEngine(
-    initial_capital=10000,
-    transaction_cost=0.001  # 0.1%
+    initial_capital=10000.0,
+    transaction_cost=0.001,
+    allocation_config=None  # Optional custom config
 )
 
-results = engine.run_vaa_backtest(years=15)
+# 동적 VAA 백테스트
+result = engine.run_dynamic_vaa_backtest(
+    years=15,
+    allocation_weights=None  # Optional custom weights
+)
+
+# 최적화 백테스트
+result, opt_result = engine.run_optimized_backtest(years=15)
+
+# 전략 비교 백테스트
+results = engine.run_vaa_backtest(
+    years=15,
+    strategies=['Current', 'Forecast_1M', 'Forecast_3M', 'Delta']
+)
+
+# 차트 그리기
 engine.plot_results(results)
 ```
 
-### RiskAnalyzer
+### PortfolioOptimizer
 
 ```python
-from opt_portfolio.analysis.risk import RiskAnalyzer
+from src.opt_portfolio.analysis.optimizer import PortfolioOptimizer
 
-analyzer = RiskAnalyzer(risk_free_rate=0.05)
-metrics = analyzer.calculate_all_metrics(returns=monthly_returns)
-print(analyzer.get_risk_report(metrics))
+# 생성
+optimizer = PortfolioOptimizer(
+    weight_min=0.05,
+    weight_max=0.70,
+    weight_step=0.05,
+    risk_free_rate=0.05
+)
+
+# 최적화 실행
+opt_result = optimizer.optimize(vaa_returns, core_returns)
+
+# 결과 속성
+opt_result.best_weights      # Dict[str, float]
+opt_result.best_sharpe       # float
+opt_result.best_return       # float
+opt_result.best_volatility   # float
+opt_result.best_max_drawdown # float
+opt_result.all_results       # DataFrame: 모든 조합
+opt_result.optimal_config    # AllocationConfig
 ```
 
 ---
 
-## 🛠️ 의존성
+## 🧪 테스트
 
-| 패키지 | 버전 | 용도 |
-|--------|------|------|
-| **numpy** | ≥1.24.0 | 수치 계산 |
-| **pandas** | ≥2.0.0 | 데이터 조작 및 분석 |
-| **yfinance** | ≥0.2.36 | 실시간 금융 데이터 |
-| **streamlit** | ≥1.28.0 | 웹 UI 프레임워크 |
-| **plotly** | ≥5.18.0 | 인터랙티브 차트 |
-| **duckdb** | ≥0.9.0 | 고속 칼럼 캐싱 |
-| **scipy** | ≥1.11.0 | 통계 분석 |
+### 수동 테스트 실행
+
+```bash
+python test_manual.py
+```
+
+출력 예시:
+```
+🧪 PORTFOLIO OPTIMIZATION TEST SUITE
+============================================================
+
+TEST 1: Configuration Module
+============================================================
+✓ Default config created
+✓ Config validation passed
+✓ Custom config created (VAA 40%, others 15%)
+✓ Asset Universe...
+✅ Configuration tests PASSED
+
+TEST 2: Portfolio Optimizer
+============================================================
+✓ Optimizer created
+✓ Generated 1234 weight combinations
+✓ Portfolio returns calculated
+✓ Sharpe ratio calculated
+✅ Optimizer tests PASSED
+
+...
+
+============================================================
+TEST SUMMARY
+============================================================
+✅ Passed: 4
+❌ Failed: 0
+Total: 4
+============================================================
+
+🎉 ALL TESTS PASSED! 🎉
+```
+
+### pytest 실행 (의존성 있을 경우)
+
+```bash
+pytest tests/ -v
+```
 
 ---
 
-## 🚨 중요 사항
+## 📊 사용 예시
 
-- **📊 데이터 출처**: Yahoo Finance API로 실시간 가격 수집
-- **🕐 시장 시간**: 정확한 가격을 위해 시장 시간 중 사용 권장
-- **🔄 리밸런싱 주기**: 월 1회 권장
-- **⚠️ 위험 고지**: 이 소프트웨어는 교육용이며 재정 조언이 아닙니다
+### 예시 1: 기본 동적 백테스트
+
+```python
+from src.opt_portfolio.analysis.backtest import BacktestEngine
+
+engine = BacktestEngine()
+result = engine.run_dynamic_vaa_backtest(years=10)
+
+print(f"10년 백테스트 결과:")
+print(f"  최종 자본: ${result.final_capital:,.0f}")
+print(f"  CAGR: {result.cagr:.2%}")
+print(f"  Sharpe: {result.sharpe_ratio:.3f}")
+```
+
+### 예시 2: 최적 비중 찾기
+
+```python
+from src.opt_portfolio.analysis.backtest import BacktestEngine
+
+engine = BacktestEngine()
+result, optimization = engine.run_optimized_backtest(years=15)
+
+# 최적 비중을 config 파일에 반영
+optimal_config = optimization.optimal_config
+print(f"최적 VAA 비중: {optimal_config.VAA_SELECTED_WEIGHT:.1%}")
+```
+
+### 예시 3: 커스텀 비중 비교
+
+```python
+from src.opt_portfolio.analysis.backtest import BacktestEngine
+
+engine = BacktestEngine()
+
+# 시나리오 1: 보수적 (VAA 30%)
+conservative = {
+    'VAA': 0.30, 'SPY': 0.175, 'TLT': 0.175, 'GLD': 0.175, 'BIL': 0.175
+}
+result1 = engine.run_dynamic_vaa_backtest(years=10, allocation_weights=conservative)
+
+# 시나리오 2: 공격적 (VAA 60%)
+aggressive = {
+    'VAA': 0.60, 'SPY': 0.10, 'TLT': 0.10, 'GLD': 0.10, 'BIL': 0.10
+}
+result2 = engine.run_dynamic_vaa_backtest(years=10, allocation_weights=aggressive)
+
+print(f"보수적: Sharpe {result1.sharpe_ratio:.3f}, MDD {result1.max_drawdown:.2%}")
+print(f"공격적: Sharpe {result2.sharpe_ratio:.3f}, MDD {result2.max_drawdown:.2%}")
+```
 
 ---
 
-## 🤝 기여
+## 🔄 변경 이력
 
-버그 수정, 새 기능, 문서 개선, 추가 테스트에 대한 Pull Request를 환영합니다!
+### v2.0.0 (2025-01-31)
 
-1. 저장소를 Fork합니다
-2. Feature 브랜치를 생성합니다 (`git checkout -b feature/AmazingFeature`)
-3. 변경사항을 커밋합니다 (`git commit -m 'Add some AmazingFeature'`)
-4. 브랜치에 Push합니다 (`git push origin feature/AmazingFeature`)
-5. Pull Request를 오픈합니다
+#### 추가
+- ✨ **동적 VAA 백테스팅**: 매월 모멘텀 기반 자산 선택
+- ✨ **Sharpe Ratio 최적화**: 그리드 서치 기반 비중 최적화
+- ✨ **유연한 비중 설정**: `AllocationConfig.from_weights()` 메서드
+- ✨ **VAA 선택 추적**: `BacktestResult.vaa_selections` 및 `get_selection_summary()`
+- ✨ **최적화 모듈**: `src/opt_portfolio/analysis/optimizer.py`
+- ✨ **수동 테스트**: `test_manual.py` 스크립트
+- ✨ **단위 테스트**: `tests/test_config.py`
+
+#### 변경
+- 🔧 `AllocationConfig`: `frozen=False`로 변경, 동적 비중 지원
+- 🔧 `BacktestEngine`: 동적 VAA 및 최적화 메서드 추가
+- 🔧 `run.py`: 메뉴 옵션 확장 (백테스트, 최적화)
+
+#### 제거
+- ❌ `vaa_agg.py` (중복)
+- ❌ `port_ratio_calculator.py` (중복)
+- ❌ `rebalance.py` (통합됨)
+- ❌ `backtest_comparison.py` (대체됨)
+- ❌ `portfolio_ui.py` (중복)
+- ❌ `integrated_portfolio.py` (통합됨)
+- ❌ `main.py` (run.py로 통합)
+
+### v1.0.0 (2025-01-15)
+
+- 초기 VAA 전략 구현
+- OU 프로세스 예측
+- 기본 백테스팅
+- Streamlit UI
 
 ---
 
-## ⚠️ 면책 조항
+## ⚠️ 주의사항
 
-**이 소프트웨어는 교육 및 연구 목적으로만 제공됩니다.**
+### 과적합 (Overfitting) 경고
 
+**최적화 결과는 과거 데이터 기반입니다.**
+- In-sample 성과 ≠ Out-of-sample 성과
+- 최적화된 비중이 미래에도 최적이라는 보장 없음
+- Walk-forward 분석 또는 Out-of-sample 테스트 권장
+
+**권장 사항:**
+```python
+# In-sample 최적화 (2010-2020)
+result1, opt1 = engine.run_optimized_backtest(years=10)
+
+# Out-of-sample 테스트 (2020-2025)
+# 최적화된 비중을 새로운 기간에 적용
+result2 = engine.run_dynamic_vaa_backtest(
+    years=5, 
+    allocation_weights=opt1.best_weights
+)
+
+# 성과 비교
+print(f"In-sample Sharpe: {result1.sharpe_ratio:.3f}")
+print(f"Out-of-sample Sharpe: {result2.sharpe_ratio:.3f}")
+```
+
+### 거래 비용
+
+**백테스트는 월간 0.1% 거래비용을 가정합니다.**
+- 실제 브로커 수수료는 다를 수 있음
+- 슬리피지는 고려하지 않음
+- 세금은 고려하지 않음
+
+### 데이터 품질
+
+**Yahoo Finance 데이터 한계:**
+- 생존 편향 (Survivorship Bias)
+- 배당금 재투자 가정
+- 조정 종가 사용
+
+---
+
+## 📜 라이선스
+
+이 프로젝트는 **MIT 라이선스** 하에 제공됩니다.
+
+---
+
+## 🙏 감사의 말
+
+- **Wouter Keller**: VAA 전략 프레임워크
+- **Yahoo Finance**: 시장 데이터
+- **오픈소스 커뮤니티**: 훌륭한 도구들
+
+---
+
+## 📞 문의
+
+- GitHub Issues: [https://github.com/younghwan91/opt_portfolio/issues](https://github.com/younghwan91/opt_portfolio/issues)
+- Email: your-email@example.com
+
+---
+
+**⚠️ 면책 조항**
+
+이 소프트웨어는 교육 및 연구 목적으로만 제공됩니다.
 - 과거 성과가 미래를 보장하지 않습니다
 - 투자는 손실의 위험이 있습니다
 - 항상 자격 있는 재정 고문과 상담하세요
@@ -431,20 +710,7 @@ print(analyzer.get_risk_report(metrics))
 
 ---
 
-## 📜 라이선스
-
-이 프로젝트는 오픈소스이며 **MIT 라이선스** 하에 제공됩니다. [LICENSE](LICENSE) 파일을 참고하세요.
-
----
-
-## 🙏 감사의 말
-
-- Wouter Keller (VAA 전략 프레임워크)
-- Yahoo Finance (시장 데이터)
-- 오픈소스 커뮤니티 (훌륭한 도구들)
-
----
-
 *❤️로 정량화(퀀트) 투자자를 위해 제작됨*
 
-**🎯 포트폴리오를 최적화할 준비가 되셨나요?** `python run.py`를 실행하고 원하는 인터페이스를 선택하세요!
+**🎯 포트폴리오를 최적화할 준비가 되셨나요?**  
+`python run.py`를 실행하고 시작하세요!
