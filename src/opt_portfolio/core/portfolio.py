@@ -241,16 +241,17 @@ class Portfolio:
         if target_allocations is None:
             target_allocations = {
                 selected_etf: ALLOCATION.VAA_SELECTED_WEIGHT,
-                'SPY': ALLOCATION.CORE_WEIGHT,
-                'TLT': ALLOCATION.CORE_WEIGHT,
-                'GLD': ALLOCATION.CORE_WEIGHT,
-                'BIL': ALLOCATION.CORE_WEIGHT
+                'SPY': ALLOCATION.SPY_WEIGHT,
+                'TLT': ALLOCATION.TLT_WEIGHT,
+                'GLD': ALLOCATION.GLD_WEIGHT,
+                'BIL': ALLOCATION.BIL_WEIGHT
             }
             
             # Remove selected_etf from core if it's there
             if selected_etf in ['SPY', 'TLT', 'GLD', 'BIL']:
+                core_weight = getattr(ALLOCATION, f'{selected_etf}_WEIGHT')
                 target_allocations[selected_etf] = (
-                    ALLOCATION.VAA_SELECTED_WEIGHT + ALLOCATION.CORE_WEIGHT
+                    ALLOCATION.VAA_SELECTED_WEIGHT + core_weight
                 )
         
         # Calculate target values and shares
