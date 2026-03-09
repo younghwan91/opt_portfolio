@@ -12,6 +12,7 @@ Provides performance attribution and analysis tools.
 import numpy as np
 import pandas as pd
 
+from .metrics import calculate_cagr
 from .risk import RiskAnalyzer
 
 
@@ -25,7 +26,7 @@ class PerformanceAnalyzer:
     - 시장 환경별 분석으로 강점/약점 파악
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize performance analyzer."""
         self.risk_analyzer = RiskAnalyzer()
 
@@ -46,10 +47,7 @@ class PerformanceAnalyzer:
         Returns:
             CAGR as decimal
         """
-        if initial_value <= 0 or years <= 0:
-            return 0.0
-
-        return (final_value / initial_value) ** (1 / years) - 1
+        return calculate_cagr(initial_value, final_value, years)
 
     def calculate_rolling_returns(self, returns: pd.Series, window: int = 12) -> pd.Series:
         """

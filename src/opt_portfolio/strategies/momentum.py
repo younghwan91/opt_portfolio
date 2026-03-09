@@ -10,6 +10,7 @@ for the VAA strategy and other momentum-based approaches.
 - 다만 모멘텀 붕괴(momentum crash) 위험 존재 (2009년 3월 등)
 """
 
+import logging
 from datetime import date, timedelta
 
 import pandas as pd
@@ -17,6 +18,8 @@ from dateutil.relativedelta import relativedelta
 
 from ..config import MOMENTUM
 from ..core.cache import get_cache
+
+logger = logging.getLogger(__name__)
 
 
 class MomentumAnalyzer:
@@ -230,7 +233,7 @@ class MomentumAnalyzer:
         # Need extra data before start for momentum calculation
         fetch_start = start_dt - timedelta(days=400)
 
-        print(f"📊 Calculating historical momentum from {start_date} to {end_date}...")
+        logger.info("Calculating historical momentum from %s to %s...", start_date, end_date)
 
         try:
             if self.cache:
@@ -265,7 +268,7 @@ class MomentumAnalyzer:
             return momentum_scores.dropna()
 
         except Exception as e:
-            print(f"Error calculating historical momentum: {e}")
+            logger.error("Error calculating historical momentum: %s", e)
             return pd.DataFrame()
 
     def calculate_momentum_series(

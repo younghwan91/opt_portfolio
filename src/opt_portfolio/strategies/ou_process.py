@@ -10,12 +10,15 @@ and Monte Carlo simulation for momentum forecasting.
 - Monte Carlo 시뮬레이션으로 확률적 예측 제공
 """
 
+import logging
 from datetime import timedelta
 
 import numpy as np
 import pandas as pd
 
 from ..config import MOMENTUM, OU_PROCESS
+
+logger = logging.getLogger(__name__)
 
 
 class OUForecaster:
@@ -217,9 +220,10 @@ class OUForecaster:
         if momentum_df.empty:
             return pd.Series(), pd.DataFrame()
 
-        print(
-            f"🎲 Simulating momentum (OU Process) for next {months} months "
-            f"({self.num_simulations} paths)..."
+        logger.info(
+            "Simulating momentum (OU Process) for next %d months (%d paths)...",
+            months,
+            self.num_simulations,
         )
 
         forecast_days = months * MOMENTUM.TRADING_DAYS_PER_MONTH
@@ -238,7 +242,7 @@ class OUForecaster:
             series = momentum_df[ticker].dropna()
 
             if len(series) < MOMENTUM.MIN_DATA_POINTS:
-                print(f"⚠️ Not enough data for {ticker}, skipping simulation.")
+                logger.warning("Not enough data for %s, skipping simulation.", ticker)
                 continue
 
             params = self.calibrate(series)

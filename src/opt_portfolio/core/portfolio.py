@@ -10,6 +10,7 @@ calculating allocations, and tracking performance.
 - 거래 비용을 고려한 최적화 필요
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -17,6 +18,8 @@ import pandas as pd
 import yfinance as yf
 
 from ..config import ALLOCATION, ASSETS
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -140,7 +143,7 @@ class Portfolio:
                     if not hist.empty:
                         price_data[ticker] = hist["Close"].iloc[-1]
             except Exception as e:
-                print(f"Warning: Could not fetch price for {ticker}: {e}")
+                logger.warning("Could not fetch price for %s: %s", ticker, e)
 
         return price_data
 
