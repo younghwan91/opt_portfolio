@@ -21,6 +21,8 @@ from ..config import ASSETS, BACKTEST, MOMENTUM, AllocationConfig
 from ..core.cache import get_cache
 from ..strategies.momentum import MomentumAnalyzer
 from ..strategies.ou_process import OUForecaster
+from .data_fetcher import DataFetcher
+from .metrics import calculate_cagr
 from .risk import RiskAnalyzer
 
 
@@ -51,10 +53,10 @@ class BacktestResult:
     # Allocation weights used
     allocation_weights: dict[str, float] | None = None
 
-    def calculate_metrics(self, years: float):
+    def calculate_metrics(self, years: float) -> None:
         """Calculate all performance metrics."""
         self.total_return = (self.final_capital / self.initial_capital) - 1
-        self.cagr = (self.final_capital / self.initial_capital) ** (1 / years) - 1
+        self.cagr = calculate_cagr(self.initial_capital, self.final_capital, years)
 
         if not self.returns.empty:
             risk_analyzer = RiskAnalyzer()
@@ -108,6 +110,7 @@ class BacktestEngine:
         self.cache = get_cache()
         self.momentum_analyzer = MomentumAnalyzer(use_cache=True)
         self.forecaster = OUForecaster()
+        self._data_fetcher = DataFetcher(cache=self.cache)
 
     def run_dynamic_vaa_backtest(
         self,
@@ -317,103 +320,15 @@ class BacktestEngine:
         """
         Get VAA selected asset returns and core asset returns separately.
 
-        This is used for portfolio optimization.
+        Delegates to DataFetcher; kept for backward compatibility.
         """
-        print("📊 Calculating component returns for optimization...")
+        return self._data_fetcher.get_component_returns(years)
 
-        agg_tickers = list(ASSETS.AGGRESSIVE_TICKERS)
-        prot_tickers = list(ASSETS.PROTECTIVE_TICKERS)
-        core_tickers = ["SPY", "TLT", "GLD", "BIL"]
-        all_tickers = list(set(agg_tickers + prot_tickers + core_tickers))
+    def _print_dynamic_summary(self, result: BacktestResult, years: int) -> None:
+        """Print summary of dynamic VAA backtest. Delegates to BacktestReporter."""
+        from .report import BacktestReporter
 
-        end_date = pd.Timestamp.today()
-        start_date = end_date - pd.DateOffset(years=years)
-        fetch_start = start_date - pd.DateOffset(days=400)
-
-        price_data = self.cache.get_incremental_data(all_tickers, fetch_start, end_date)
-
-        if price_data.empty:
-            return pd.Series(), pd.DataFrame()
-
-        monthly_prices = price_data.resample("ME").last()
-        monthly_dates = monthly_prices.index[monthly_prices.index >= start_date]
-
-        vaa_returns = []
-        core_returns_list = []
-        dates = []
-
-        for i in range(len(monthly_dates) - 1):
-            rebal_date = monthly_dates[i]
-            next_date = monthly_dates[i + 1]
-
-            hist_data = price_data.loc[:rebal_date]
-
-            # VAA Selection
-            agg_mom_df = self.momentum_analyzer.calculate_momentum_series(hist_data, agg_tickers)
-            if agg_mom_df.empty:
-                continue
-
-            prot_mom_df = self.momentum_analyzer.calculate_momentum_series(hist_data, prot_tickers)
-
-            agg_current_scores = agg_mom_df.iloc[-1]
-            is_defensive = (agg_current_scores < 0).any()
-
-            if is_defensive:
-                if not prot_mom_df.empty:
-                    prot_scores = prot_mom_df.iloc[-1]
-                    vaa_selected = prot_scores.idxmax()
-                else:
-                    vaa_selected = "SHY"
-            else:
-                vaa_selected = agg_current_scores.idxmax()
-
-            # Calculate returns
-            price_start = monthly_prices.loc[rebal_date]
-            price_end = monthly_prices.loc[next_date]
-
-            vaa_ret = (price_end[vaa_selected] / price_start[vaa_selected]) - 1
-            vaa_returns.append(vaa_ret)
-
-            core_ret = {}
-            for asset in core_tickers:
-                if asset in price_start.index and asset in price_end.index:
-                    core_ret[asset] = (price_end[asset] / price_start[asset]) - 1
-            core_returns_list.append(core_ret)
-
-            dates.append(next_date)
-
-        vaa_series = pd.Series(vaa_returns, index=dates, name="VAA")
-        core_df = pd.DataFrame(core_returns_list, index=dates)
-
-        return vaa_series, core_df
-
-    def _print_dynamic_summary(self, result: BacktestResult, years: int):
-        """Print summary of dynamic VAA backtest."""
-        print("\n" + "=" * 70)
-        print("📊 DYNAMIC VAA BACKTEST RESULT")
-        print("=" * 70)
-        print(f"{'Metric':<25} | {'Value':<20}")
-        print("-" * 70)
-        print(f"{'Strategy':<25} | {result.strategy_name:<20}")
-        print(f"{'Period':<25} | {years} years")
-        print(f"{'Initial Capital':<25} | ${result.initial_capital:,.0f}")
-        print(f"{'Final Capital':<25} | ${result.final_capital:,.0f}")
-        print(f"{'Total Return':<25} | {result.total_return:.1%}")
-        print(f"{'CAGR':<25} | {result.cagr:.1%}")
-        print(f"{'Sharpe Ratio':<25} | {result.sharpe_ratio:.3f}")
-        print(f"{'Max Drawdown':<25} | {result.max_drawdown:.1%}")
-        print(f"{'Win Rate':<25} | {result.win_rate:.1%}")
-        print(f"{'Defensive Months':<25} | {result.defensive_ratio:.1%}")
-
-        # VAA Selection breakdown
-        if result.vaa_selections:
-            print("\n📈 VAA Selection Distribution:")
-            selection_counts = pd.Series(result.vaa_selections).value_counts()
-            for ticker, count in selection_counts.items():
-                pct = count / len(result.vaa_selections) * 100
-                print(f"   {ticker}: {count} months ({pct:.1f}%)")
-
-        print("=" * 70)
+        BacktestReporter().print_dynamic_summary(result, years)
 
     def run_vaa_backtest(
         self, years: int = BACKTEST.DEFAULT_YEARS, strategies: list[str] | None = None
@@ -590,36 +505,11 @@ class BacktestEngine:
 
         return scores
 
-    def _print_backtest_summary(self, results: dict[str, BacktestResult], years: int):
-        """Print backtest results summary."""
-        print("\n" + "=" * 80)
-        print("📊 BACKTEST RESULTS SUMMARY")
-        print("=" * 80)
+    def _print_backtest_summary(self, results: dict[str, BacktestResult], years: int) -> None:
+        """Print backtest results summary. Delegates to BacktestReporter."""
+        from .report import BacktestReporter
 
-        header = (
-            f"{'Strategy':<15} | {'Final Value':>12} | {'CAGR':>8} | "
-            f"{'Sharpe':>7} | {'MDD':>8} | {'Defensive':>10}"
-        )
-        print(header)
-        print("-" * 80)
-
-        for name, result in results.items():
-            print(
-                f"{name:<15} | ${result.final_capital:>10,.0f} | {result.cagr:>7.1%} | "
-                f"{result.sharpe_ratio:>7.2f} | {result.max_drawdown:>7.1%} | "
-                f"{result.defensive_ratio:>9.1%}"
-            )
-
-        print("=" * 80)
-
-        # Find best strategy
-        best_sharpe = max(results.values(), key=lambda x: x.sharpe_ratio)
-        best_return = max(results.values(), key=lambda x: x.total_return)
-
-        print(
-            f"\n🏆 Best Sharpe Ratio: {best_sharpe.strategy_name} ({best_sharpe.sharpe_ratio:.2f})"
-        )
-        print(f"💰 Best Total Return: {best_return.strategy_name} ({best_return.total_return:.1%})")
+        BacktestReporter().print_comparison_summary(results, years)
 
     def plot_results(
         self,
@@ -705,7 +595,9 @@ class BacktestEngine:
         plt.tight_layout()
         plt.show()
 
-    def compare_with_benchmark(self, result: BacktestResult, benchmark_ticker: str = "SPY") -> dict:
+    def compare_with_benchmark(
+        self, result: BacktestResult, benchmark_ticker: str = "SPY"
+    ) -> dict[str, float]:
         """
         Compare strategy with benchmark.
 
