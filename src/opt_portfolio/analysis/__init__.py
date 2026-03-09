@@ -1,15 +1,15 @@
 """Analysis module initialization."""
 
 from .backtest import BacktestEngine, BacktestResult
-from .risk import RiskAnalyzer
+from .optimizer import OptimizationResult, PortfolioOptimizer
 from .performance import PerformanceAnalyzer
-from .optimizer import PortfolioOptimizer, OptimizationResult
+from .risk import RiskAnalyzer
 
 __all__ = [
-    "BacktestEngine", 
+    "BacktestEngine",
     "BacktestResult",
-    "RiskAnalyzer", 
+    "RiskAnalyzer",
     "PerformanceAnalyzer",
     "PortfolioOptimizer",
-    "OptimizationResult"
+    "OptimizationResult",
 ]
