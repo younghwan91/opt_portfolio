@@ -32,11 +32,15 @@ def daily_prices() -> pd.DataFrame:
 
 
 class TestCalculateReturns:
-    def test_returns_four_periods(self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame) -> None:
+    def test_returns_four_periods(
+        self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame
+    ) -> None:
         result = analyzer.calculate_returns(daily_prices)
         assert set(result.keys()) == {"1-Month", "3-Month", "6-Month", "12-Month"}
 
-    def test_returns_are_percent_values(self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame) -> None:
+    def test_returns_are_percent_values(
+        self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame
+    ) -> None:
         result = analyzer.calculate_returns(daily_prices)
         # Values should be percentage points (not fractions)
         vals = result["1-Month"].dropna().values.flatten()
@@ -49,12 +53,16 @@ class TestCalculateReturns:
 
 
 class TestCalculateMomentumScore:
-    def test_output_shape_matches_tickers(self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame) -> None:
+    def test_output_shape_matches_tickers(
+        self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame
+    ) -> None:
         returns = analyzer.calculate_returns(daily_prices)
         scores = analyzer.calculate_momentum_score(returns)
         assert set(scores.columns) == {"SPY", "TLT", "GLD"}
 
-    def test_custom_weights_applied(self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame) -> None:
+    def test_custom_weights_applied(
+        self, analyzer: MomentumAnalyzer, daily_prices: pd.DataFrame
+    ) -> None:
         returns = analyzer.calculate_returns(daily_prices)
         scores_default = analyzer.calculate_momentum_score(returns)
         scores_equal = analyzer.calculate_momentum_score(returns, weights=[1, 1, 1, 1])
@@ -69,17 +77,21 @@ class TestCalculateMomentumScore:
 
 class TestIsNegativeMomentum:
     def test_all_positive_scores_not_defensive(self, analyzer: MomentumAnalyzer) -> None:
-        ranked = pd.DataFrame({
-            "Ticker": ["SPY", "TLT", "GLD"],
-            "Momentum Score": [10.0, 5.0, 3.0],
-        })
+        ranked = pd.DataFrame(
+            {
+                "Ticker": ["SPY", "TLT", "GLD"],
+                "Momentum Score": [10.0, 5.0, 3.0],
+            }
+        )
         result = analyzer.is_negative_momentum(ranked)
         assert not result
 
     def test_negative_scores_triggers_defensive(self, analyzer: MomentumAnalyzer) -> None:
-        ranked = pd.DataFrame({
-            "Ticker": ["SPY", "TLT", "GLD"],
-            "Momentum Score": [-10.0, -5.0, -3.0],
-        })
+        ranked = pd.DataFrame(
+            {
+                "Ticker": ["SPY", "TLT", "GLD"],
+                "Momentum Score": [-10.0, -5.0, -3.0],
+            }
+        )
         result = analyzer.is_negative_momentum(ranked)
         assert result

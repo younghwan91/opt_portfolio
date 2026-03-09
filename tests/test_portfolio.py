@@ -61,7 +61,9 @@ class TestGetAllocation:
         p.positions["SPY"].current_price = 400.0
         p.positions["TLT"].current_price = 140.0
         df = p.get_allocation()
-        pct_col = [c for c in df.columns if "%" in c or "weight" in c.lower() or "alloc" in c.lower()]
+        pct_col = [
+            c for c in df.columns if "%" in c or "weight" in c.lower() or "alloc" in c.lower()
+        ]
         if pct_col:
             total = df[pct_col[0]].sum()
             assert abs(total - 100.0) < 0.1

@@ -44,7 +44,9 @@ class TestCalculateVolatility:
         vol = analyzer.calculate_volatility(returns)
         assert vol < 1e-10  # effectively zero
 
-    def test_annualized_higher_than_period(self, analyzer: RiskAnalyzer, positive_returns: pd.Series) -> None:
+    def test_annualized_higher_than_period(
+        self, analyzer: RiskAnalyzer, positive_returns: pd.Series
+    ) -> None:
         vol_ann = analyzer.calculate_volatility(positive_returns, annualize=True)
         vol_raw = analyzer.calculate_volatility(positive_returns, annualize=False)
         assert vol_ann > vol_raw
@@ -56,11 +58,15 @@ class TestCalculateVolatility:
 
 
 class TestCalculateSharpeRatio:
-    def test_positive_drift_positive_sharpe(self, analyzer: RiskAnalyzer, positive_returns: pd.Series) -> None:
+    def test_positive_drift_positive_sharpe(
+        self, analyzer: RiskAnalyzer, positive_returns: pd.Series
+    ) -> None:
         result = analyzer.calculate_sharpe_ratio(positive_returns)
         assert result > 0
 
-    def test_negative_drift_negative_sharpe(self, analyzer: RiskAnalyzer, negative_returns: pd.Series) -> None:
+    def test_negative_drift_negative_sharpe(
+        self, analyzer: RiskAnalyzer, negative_returns: pd.Series
+    ) -> None:
         result = analyzer.calculate_sharpe_ratio(negative_returns)
         assert result < 0
 
@@ -70,7 +76,9 @@ class TestCalculateSharpeRatio:
 
 
 class TestCalculateMaxDrawdown:
-    def test_monotone_growth_near_zero_mdd(self, analyzer: RiskAnalyzer, price_series: pd.Series) -> None:
+    def test_monotone_growth_near_zero_mdd(
+        self, analyzer: RiskAnalyzer, price_series: pd.Series
+    ) -> None:
         mdd, _peak, _trough = analyzer.calculate_max_drawdown(price_series)
         assert mdd >= 0.0
 
@@ -91,14 +99,18 @@ class TestCalculateVar:
         result = analyzer.calculate_var(positive_returns)
         assert isinstance(result, float)
 
-    def test_higher_confidence_higher_var(self, analyzer: RiskAnalyzer, positive_returns: pd.Series) -> None:
+    def test_higher_confidence_higher_var(
+        self, analyzer: RiskAnalyzer, positive_returns: pd.Series
+    ) -> None:
         var_95 = analyzer.calculate_var(positive_returns, confidence=0.95)
         var_99 = analyzer.calculate_var(positive_returns, confidence=0.99)
         assert var_99 >= var_95
 
 
 class TestCalculateBeta:
-    def test_same_series_beta_one(self, analyzer: RiskAnalyzer, positive_returns: pd.Series) -> None:
+    def test_same_series_beta_one(
+        self, analyzer: RiskAnalyzer, positive_returns: pd.Series
+    ) -> None:
         beta = analyzer.calculate_beta(positive_returns, positive_returns)
         assert abs(beta - 1.0) < 1e-6
 

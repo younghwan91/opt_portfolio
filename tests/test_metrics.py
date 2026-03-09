@@ -102,4 +102,3 @@ class TestCalculateMaxDrawdown:
         equity = sample_prices["SPY"]
         result = calculate_max_drawdown(equity)
         assert result >= 0.0
-

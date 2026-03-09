@@ -44,23 +44,31 @@ class TestCalculateCagr:
 
 
 class TestCalculateRollingReturns:
-    def test_output_length_correct(self, perf: PerformanceAnalyzer, monthly_returns: pd.Series) -> None:
+    def test_output_length_correct(
+        self, perf: PerformanceAnalyzer, monthly_returns: pd.Series
+    ) -> None:
         result = perf.calculate_rolling_returns(monthly_returns, window=12)
         # Rolling window of 12 on 48 → 37 valid entries
         assert len(result.dropna()) == len(monthly_returns) - 12 + 1
 
-    def test_window_1_equals_input(self, perf: PerformanceAnalyzer, monthly_returns: pd.Series) -> None:
+    def test_window_1_equals_input(
+        self, perf: PerformanceAnalyzer, monthly_returns: pd.Series
+    ) -> None:
         result = perf.calculate_rolling_returns(monthly_returns, window=1)
         pd.testing.assert_series_equal(result.dropna(), monthly_returns, check_names=False)
 
 
 class TestCalculateMonthlyStatistics:
-    def test_returns_expected_keys(self, perf: PerformanceAnalyzer, monthly_returns: pd.Series) -> None:
+    def test_returns_expected_keys(
+        self, perf: PerformanceAnalyzer, monthly_returns: pd.Series
+    ) -> None:
         stats = perf.calculate_monthly_statistics(monthly_returns)
         for key in ("mean", "std", "win_rate"):
             assert key in stats
 
-    def test_win_rate_between_0_and_1(self, perf: PerformanceAnalyzer, monthly_returns: pd.Series) -> None:
+    def test_win_rate_between_0_and_1(
+        self, perf: PerformanceAnalyzer, monthly_returns: pd.Series
+    ) -> None:
         stats = perf.calculate_monthly_statistics(monthly_returns)
         assert 0.0 <= stats["win_rate"] <= 1.0
 
@@ -76,7 +84,9 @@ class TestAnalyzeByYear:
         assert isinstance(result, pd.DataFrame)
         assert len(result) > 0
 
-    def test_year_column_present(self, perf: PerformanceAnalyzer, monthly_returns: pd.Series) -> None:
+    def test_year_column_present(
+        self, perf: PerformanceAnalyzer, monthly_returns: pd.Series
+    ) -> None:
         result = perf.analyze_by_year(monthly_returns)
         assert "Year" in result.columns
 
