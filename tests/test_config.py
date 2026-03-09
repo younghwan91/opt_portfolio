@@ -4,13 +4,14 @@ Test suite for configuration module.
 
 import pytest
 from opt_portfolio.config import (
-    AllocationConfig, 
-    AssetUniverse, 
+    AllocationConfig,
+    AssetUniverse,
     MomentumConfig,
     OUProcessConfig,
-    ASSETS, 
-    ALLOCATION, 
-    MOMENTUM
+    ASSETS,
+    ALLOCATION,
+    MOMENTUM,
+    OU_PROCESS,
 )
 
 
@@ -119,20 +120,17 @@ class TestOUProcessConfig:
     
     def test_theta_bounds(self):
         """Test theta bounds are reasonable."""
-        from src.opt_portfolio.config import OU_PROCESS
         assert OU_PROCESS.THETA_MIN > 0
         assert OU_PROCESS.THETA_MAX > OU_PROCESS.THETA_MIN
         assert OU_PROCESS.THETA_MAX <= 1.0
-    
+
     def test_slope_bounds(self):
         """Test slope bounds are valid."""
-        from src.opt_portfolio.config import OU_PROCESS
         assert 0 < OU_PROCESS.SLOPE_MIN < 1
         assert 0 < OU_PROCESS.SLOPE_MAX < 1
         assert OU_PROCESS.SLOPE_MAX > OU_PROCESS.SLOPE_MIN
-    
+
     def test_simulation_defaults(self):
         """Test simulation default values."""
-        from src.opt_portfolio.config import OU_PROCESS
         assert OU_PROCESS.DEFAULT_SIMULATIONS >= 100
         assert OU_PROCESS.DEFAULT_FORECAST_MONTHS >= 1
