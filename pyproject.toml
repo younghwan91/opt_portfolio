@@ -97,7 +97,6 @@ select = [
 ]
 ignore = [
     "E203",  # whitespace before ':'
-    "W503",  # line break before binary operator
 ]
 
 [tool.ruff.lint.isort]

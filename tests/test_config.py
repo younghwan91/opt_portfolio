@@ -3,7 +3,7 @@ Test suite for configuration module.
 """
 
 import pytest
-from src.opt_portfolio.config import (
+from opt_portfolio.config import (
     AllocationConfig, 
     AssetUniverse, 
     MomentumConfig,
