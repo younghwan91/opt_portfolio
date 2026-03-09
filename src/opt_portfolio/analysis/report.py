@@ -53,9 +53,7 @@ class BacktestReporter:
 
         print("=" * 70)
 
-    def print_comparison_summary(
-        self, results: dict[str, BacktestResult], years: int
-    ) -> None:
+    def print_comparison_summary(self, results: dict[str, BacktestResult], years: int) -> None:
         """
         Print a side-by-side comparison of multiple backtest results.
 
@@ -87,10 +85,6 @@ class BacktestReporter:
         best_return = max(results.values(), key=lambda x: x.total_return)
 
         print(
-            f"\n🏆 Best Sharpe Ratio: {best_sharpe.strategy_name} "
-            f"({best_sharpe.sharpe_ratio:.2f})"
+            f"\n🏆 Best Sharpe Ratio: {best_sharpe.strategy_name} ({best_sharpe.sharpe_ratio:.2f})"
         )
-        print(
-            f"💰 Best Total Return: {best_return.strategy_name} "
-            f"({best_return.total_return:.1%})"
-        )
+        print(f"💰 Best Total Return: {best_return.strategy_name} ({best_return.total_return:.1%})")

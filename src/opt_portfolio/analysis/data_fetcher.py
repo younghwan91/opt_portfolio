@@ -118,9 +118,7 @@ class DataFetcher:
             is_defensive = bool((agg_current_scores < 0).any())
 
             if is_defensive:
-                vaa_selected = (
-                    prot_mom_df.iloc[-1].idxmax() if not prot_mom_df.empty else "SHY"
-                )
+                vaa_selected = prot_mom_df.iloc[-1].idxmax() if not prot_mom_df.empty else "SHY"
             else:
                 vaa_selected = agg_current_scores.idxmax()
 
