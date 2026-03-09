@@ -10,14 +10,19 @@ with automatic incremental updates to minimize redundant API calls.
 - 자동 데이터 검증으로 데이터 무결성 보장
 """
 
+import logging
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 import yfinance as yf
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..config import CACHE
+
+logger = logging.getLogger(__name__)
 
 
 class DataCache:
@@ -43,6 +48,7 @@ class DataCache:
         cache_dir.mkdir(exist_ok=True)
 
         self.db_path = db_path
+        self._lock = threading.Lock()
         self.conn = duckdb.connect(str(db_path))
         self._init_database()
 
@@ -137,7 +143,7 @@ class DataCache:
 
             return df
         except Exception as e:
-            print(f"⚠️ Error reading from cache: {e}")
+            logger.error("Error reading from cache: %s", e)
             return pd.DataFrame()
 
     def get_ohlcv(
@@ -174,7 +180,7 @@ class DataCache:
 
             return result
         except Exception as e:
-            print(f"⚠️ Error reading OHLCV from cache: {e}")
+            logger.error("Error reading OHLCV from cache: %s", e)
             return pd.DataFrame()
 
     def save_data(self, df: pd.DataFrame, tickers: list[str]) -> None:
@@ -226,10 +232,10 @@ class DataCache:
                 )
 
             self.conn.commit()
-            print(f"💾 Cached {len(df_long)} price records")
+            logger.info("Cached %d price records", len(df_long))
 
         except Exception as e:
-            print(f"⚠️ Error saving to cache: {e}")
+            logger.error("Error saving to cache: %s", e)
 
     def get_missing_date_ranges(
         self, ticker: str, start_date: str | datetime, end_date: str | datetime
@@ -315,18 +321,16 @@ class DataCache:
                 tickers_to_fetch.append(ticker)
 
         if not tickers_to_fetch:
-            print(f"✅ Using cached data for {', '.join(tickers)}")
+            logger.info("Using cached data for %s", ", ".join(tickers))
             return cached_data
 
         # Fetch missing data
-        print(f"📥 Fetching data for: {', '.join(tickers_to_fetch)}")
+        logger.info("Fetching data for: %s", ", ".join(tickers_to_fetch))
         try:
-            new_data = yf.download(
+            new_data = self._download_with_retry(
                 tickers_to_fetch,
                 start=start_date,
                 end=end_date + timedelta(days=1),
-                auto_adjust=True,
-                progress=False,
             )
 
             if "Close" in new_data.columns:
@@ -343,7 +347,7 @@ class DataCache:
             return complete_data
 
         except Exception as e:
-            print(f"⚠️ Error fetching data: {e}")
+            logger.error("Error fetching data: %s", e)
             return cached_data if not cached_data.empty else pd.DataFrame()
 
     def get_cache_stats(self) -> pd.DataFrame:
@@ -367,7 +371,7 @@ class DataCache:
 
             return stats
         except Exception as e:
-            print(f"⚠️ Error getting cache stats: {e}")
+            logger.error("Error getting cache stats: %s", e)
             return pd.DataFrame()
 
     def clear_cache(
@@ -389,22 +393,22 @@ class DataCache:
                 self.conn.execute(
                     f"DELETE FROM cache_metadata WHERE ticker IN ({placeholders})", tickers
                 )
-                print(f"🗑️ Cleared cache for: {', '.join(tickers)}")
+                logger.info("Cleared cache for: %s", ", ".join(tickers))
             elif older_than_days:
                 cutoff = datetime.now() - timedelta(days=older_than_days)
                 self.conn.execute("DELETE FROM price_data WHERE last_updated < ?", [cutoff])
                 self.conn.execute("DELETE FROM cache_metadata WHERE last_updated < ?", [cutoff])
-                print(f"🗑️ Cleared cache older than {older_than_days} days")
+                logger.info("Cleared cache older than %d days", older_than_days)
             else:
                 self.conn.execute("DELETE FROM price_data")
                 self.conn.execute("DELETE FROM cache_metadata")
                 self.conn.execute("DELETE FROM momentum_cache")
-                print("🗑️ Cleared all cache data")
+                logger.info("Cleared all cache data")
 
             self.conn.commit()
 
         except Exception as e:
-            print(f"⚠️ Error clearing cache: {e}")
+            logger.error("Error clearing cache: %s", e)
 
     def validate_data(self, ticker: str) -> dict:
         """
@@ -460,30 +464,59 @@ class DataCache:
         try:
             self.conn.execute("VACUUM")
             self.conn.execute("ANALYZE")
-            print("✨ Cache database optimized")
+            logger.info("Cache database optimized")
         except Exception as e:
-            print(f"⚠️ Error optimizing database: {e}")
+            logger.error("Error optimizing database: %s", e)
 
     def close(self) -> None:
         """Close database connection."""
         self.conn.close()
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        reraise=True,
+    )
+    def _download_with_retry(
+        self,
+        tickers: list[str],
+        start: datetime,
+        end: datetime,
+    ) -> pd.DataFrame:
+        """Download data from yfinance with exponential backoff retry."""
+        data = yf.download(
+            tickers,
+            start=start,
+            end=end,
+            auto_adjust=True,
+            progress=False,
+        )
+        if "Close" in data.columns:
+            data = data["Close"]
+        if isinstance(data, pd.Series):
+            data = data.to_frame(name=tickers[0])
+        return data
 
-# Global cache instance
+
+# Global cache instance (thread-safe)
 _cache: DataCache | None = None
+_cache_lock = threading.Lock()
 
 
 def get_cache() -> DataCache:
-    """Get or create the global cache instance."""
+    """Get or create the global cache instance (thread-safe)."""
     global _cache
     if _cache is None:
-        _cache = DataCache()
+        with _cache_lock:
+            if _cache is None:
+                _cache = DataCache()
     return _cache
 
 
 def clear_global_cache() -> None:
     """Clear and reset the global cache instance."""
     global _cache
-    if _cache is not None:
-        _cache.close()
-        _cache = None
+    with _cache_lock:
+        if _cache is not None:
+            _cache.close()
+            _cache = None
