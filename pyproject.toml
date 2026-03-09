@@ -103,6 +103,9 @@ ignore = [
     "W293",  # blank line contains whitespace (inside string literals)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["E501"]  # test method signatures can exceed line length
+
 [tool.ruff.lint.isort]
 known-first-party = ["opt_portfolio"]
 
