@@ -97,6 +97,8 @@ select = [
 ]
 ignore = [
     "E203",  # whitespace before ':'
+    "W291",  # trailing whitespace (inside string literals)
+    "W293",  # blank line contains whitespace (inside string literals)
 ]
 
 [tool.ruff.lint.isort]
@@ -123,4 +125,9 @@ exclude_lines = [
     "def __repr__",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.5",
 ]
