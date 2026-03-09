@@ -21,6 +21,7 @@ from ..config import ASSETS, BACKTEST, MOMENTUM, AllocationConfig
 from ..core.cache import get_cache
 from ..strategies.momentum import MomentumAnalyzer
 from ..strategies.ou_process import OUForecaster
+from .metrics import calculate_cagr
 from .risk import RiskAnalyzer
 
 
@@ -51,10 +52,10 @@ class BacktestResult:
     # Allocation weights used
     allocation_weights: dict[str, float] | None = None
 
-    def calculate_metrics(self, years: float):
+    def calculate_metrics(self, years: float) -> None:
         """Calculate all performance metrics."""
         self.total_return = (self.final_capital / self.initial_capital) - 1
-        self.cagr = (self.final_capital / self.initial_capital) ** (1 / years) - 1
+        self.cagr = calculate_cagr(self.initial_capital, self.final_capital, years)
 
         if not self.returns.empty:
             risk_analyzer = RiskAnalyzer()
@@ -387,7 +388,7 @@ class BacktestEngine:
 
         return vaa_series, core_df
 
-    def _print_dynamic_summary(self, result: BacktestResult, years: int):
+    def _print_dynamic_summary(self, result: BacktestResult, years: int) -> None:
         """Print summary of dynamic VAA backtest."""
         print("\n" + "=" * 70)
         print("📊 DYNAMIC VAA BACKTEST RESULT")
@@ -590,7 +591,7 @@ class BacktestEngine:
 
         return scores
 
-    def _print_backtest_summary(self, results: dict[str, BacktestResult], years: int):
+    def _print_backtest_summary(self, results: dict[str, BacktestResult], years: int) -> None:
         """Print backtest results summary."""
         print("\n" + "=" * 80)
         print("📊 BACKTEST RESULTS SUMMARY")
@@ -705,7 +706,9 @@ class BacktestEngine:
         plt.tight_layout()
         plt.show()
 
-    def compare_with_benchmark(self, result: BacktestResult, benchmark_ticker: str = "SPY") -> dict:
+    def compare_with_benchmark(
+        self, result: BacktestResult, benchmark_ticker: str = "SPY"
+    ) -> dict[str, float]:
         """
         Compare strategy with benchmark.
 
