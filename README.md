@@ -4,6 +4,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-younghwan--chae-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/younghwan-chae/)
 
 매월 모멘텀 신호로 ETF를 동적으로 갈아타는 VAA 전략을 구현하고, 비중을 Sharpe 비율 기준으로 최적화한다. 백테스트·리스크 분석·예측 모듈을 함께 제공한다.
 
