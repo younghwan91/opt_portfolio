@@ -133,3 +133,33 @@ make typecheck      # mypy src/
 ## 라이선스
 
 MIT
+
+
+---
+
+## ⭐ 도움이 되셨다면
+
+이 프로젝트가 유용했다면 우측 상단 **[⭐ Star](https://github.com/younghwan91/opt_portfolio)** 를 눌러주세요. 검색·추천 노출이 올라가 더 많은 분들이 찾을 수 있습니다.
+
+- 🐛 버그·질문 → [Issues](https://github.com/younghwan91/opt_portfolio/issues)
+- 📈 업데이트 소식 → [팔로우 @younghwan91](https://github.com/younghwan91)
+
+## 관련 프로젝트 — 한국 주식 퀀트 스택
+
+시세·펀더멘탈·뉴스 수집 REST API부터 데이터 파이프라인, 백테스트·알파 리서치까지 이어지는 오픈소스 스택의 일부입니다.
+
+| 프로젝트 | 설명 |
+|---|---|
+| **[kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)** | 키움증권 REST API Python 라이브러리 — 207개 엔드포인트 + 실시간 WebSocket |
+| **[krx-fundamentals-api](https://github.com/younghwan91/krx-fundamentals-api)** | 국내 기업 펀더멘탈 REST API — 재무제표·투자지표·배당·종목 스크리닝 (DART + KRX + 네이버) |
+| **[krx-news-rest-api](https://github.com/younghwan91/krx-news-rest-api)** | 한국 주식 뉴스·공시 수집 REST API (FastAPI + Redis) |
+| **[kr-quant-airflow](https://github.com/younghwan91/kr-quant-airflow)** | 시세·수급·실적 데이터를 TimescaleDB로 수집하는 Airflow 파이프라인 |
+| **[kr-quant](https://github.com/younghwan91/kr-quant)** | 코스피·코스닥 알파 리서치 — walk-forward·랜덤 음성대조를 강제하는 검증 가드레일 |
+| **[quantbox-engine](https://github.com/younghwan91/quantbox-engine)** | 암호화폐 선물 백테스트·실행 엔진 — 룩어헤드 0, 백테스트↔실거래 일체화 |
+| **[automated-stock-trading-systems](https://github.com/younghwan91/automated-stock-trading-systems)** | Bensdorp의 7개 비상관 트레이딩 시스템 백테스터 (교육용 재구현) |
+
+## 만든 사람
+
+**채영환 (Younghwan Chae)** · [GitHub @younghwan91](https://github.com/younghwan91) · [LinkedIn](https://www.linkedin.com/in/younghwan-chae/)
+
+전체 오픈소스 퀀트 스택은 [프로필](https://github.com/younghwan91)에서 한눈에 볼 수 있습니다.
