@@ -100,10 +100,10 @@ def risk_parity(returns: pd.DataFrame) -> pd.Series:
     b = np.full(n, 1.0 / n)
 
     def objective(w: np.ndarray) -> float:
-        return 0.5 * w @ cov @ w - b @ np.log(w)
+        return float(0.5 * w @ cov @ w - b @ np.log(w))
 
     def grad(w: np.ndarray) -> np.ndarray:
-        return cov @ w - b / w
+        return np.asarray(cov @ w - b / w)
 
     res = sp_opt.minimize(
         objective,
@@ -233,7 +233,7 @@ def _scores_to_mu(scores: pd.Series, names: pd.Index, scale: float) -> np.ndarra
     """스코어를 횡단면 z 로 표준화 후 수익률 단위로 스케일."""
     s = scores.reindex(names).astype(float)
     z = (s - s.mean()) / s.std(ddof=0) if s.std(ddof=0) > 0 else s * 0.0
-    return (z.fillna(0.0) * scale).to_numpy()
+    return np.asarray((z.fillna(0.0) * scale).to_numpy())
 
 
 def _solve_mvo(
@@ -247,10 +247,10 @@ def _solve_mvo(
     cap = max(max_weight, 1.0 / n)  # cap 이 1/n 미만이면 실행 불가능
 
     def objective(w: np.ndarray) -> float:
-        return -(mu @ w) + 0.5 * risk_aversion * w @ cov @ w
+        return float(-(mu @ w) + 0.5 * risk_aversion * w @ cov @ w)
 
     def grad(w: np.ndarray) -> np.ndarray:
-        return -mu + risk_aversion * cov @ w
+        return np.asarray(-mu + risk_aversion * cov @ w)
 
     res = sp_opt.minimize(
         objective,
@@ -269,9 +269,7 @@ def _solve_mvo(
 
 WeightFn = Callable[..., pd.Series]
 
-SCHEMES = frozenset(
-    {"equal", "inverse_vol", "risk_parity", "hrp", "mvo", "black_litterman"}
-)
+SCHEMES = frozenset({"equal", "inverse_vol", "risk_parity", "hrp", "mvo", "black_litterman"})
 
 
 def compute_weights(

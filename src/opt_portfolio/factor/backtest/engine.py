@@ -35,22 +35,22 @@ class BacktestConfig:
     """전략 정의 — 이 객체의 필드들이 곧 PO 의 탐색 공간이다."""
 
     n_stocks: int = 20
-    rebalance: str = "ME"           # 'ME' 월말 | 'QE' 분기말 | 'W-FRI' 주간
+    rebalance: str = "ME"  # 'ME' 월말 | 'QE' 분기말 | 'W-FRI' 주간
     weighting: str = "equal"
     max_weight: float = 0.10
     cov_window: int = 252
     cost: CostModel = field(default_factory=CostModel)
-    ir_scale: float = 0.03          # MVO/BL 전용
-    view_confidence: float = 0.5    # BL 전용
+    ir_scale: float = 0.03  # MVO/BL 전용
+    view_confidence: float = 0.5  # BL 전용
 
 
 @dataclass
 class BacktestResult:
-    returns: pd.Series               # 일별 순수익률 (비용 차감 후)
-    equity: pd.Series                # 누적 자산 (1.0 시작)
-    holdings: pd.DataFrame           # 리밸런싱일 × 종목 목표비중
-    turnover: pd.Series              # 리밸런싱일별 편도 회전율
-    exposure: pd.Series              # 적용된 타이밍 익스포저
+    returns: pd.Series  # 일별 순수익률 (비용 차감 후)
+    equity: pd.Series  # 누적 자산 (1.0 시작)
+    holdings: pd.DataFrame  # 리밸런싱일 × 종목 목표비중
+    turnover: pd.Series  # 리밸런싱일별 편도 회전율
+    exposure: pd.Series  # 적용된 타이밍 익스포저
 
     def stats(self, periods_per_year: int = 252) -> dict[str, float]:
         r = self.returns.dropna()
@@ -133,9 +133,7 @@ def run_backtest(
         if selected.empty:
             continue
 
-        new_w = _weights_for(
-            selected, rets, market_caps, signal_date, config
-        )
+        new_w = _weights_for(selected, rets, market_caps, signal_date, config)
 
         # 체결일: 신호 다음 거래일
         pos = calendar.searchsorted(signal_date) + 1
@@ -232,14 +230,18 @@ def _weights_for(
     if scheme == "black_litterman":
         kwargs["view_confidence"] = config.view_confidence
 
-    return compute_weights(
-        scheme,
-        window.dropna(how="any"),
-        selected,
-        max_weight=config.max_weight,
-        market_caps=caps,
-        **kwargs,
-    ).reindex(names).fillna(1.0 / len(names) if scheme == "equal" else 0.0)
+    return (
+        compute_weights(
+            scheme,
+            window.dropna(how="any"),
+            selected,
+            max_weight=config.max_weight,
+            market_caps=caps,
+            **kwargs,
+        )
+        .reindex(names)
+        .fillna(1.0 / len(names) if scheme == "equal" else 0.0)
+    )
 
 
 def _drift_segment(

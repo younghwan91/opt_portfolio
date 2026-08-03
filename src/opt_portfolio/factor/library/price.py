@@ -21,7 +21,7 @@ from opt_portfolio.factor.dsl.registry import factor
 
 _SEP = ("SEP",)
 _RET = F.close.pct_change(1)
-_ANN = 252 ** 0.5
+_ANN = 252**0.5
 
 # ------------------------------------------------------------------ 모멘텀
 
@@ -50,8 +50,12 @@ MOM_12_1 = factor(
 )
 
 CLOSE_UNADJ = factor(
-    "CLOSE_UNADJ", F.closeunadj, category="price", label="종가 (수정 전)",
-    requires=_SEP, notes="팩터가 아니라 페니스톡 필터용",
+    "CLOSE_UNADJ",
+    F.closeunadj,
+    category="price",
+    label="종가 (수정 전)",
+    requires=_SEP,
+    notes="팩터가 아니라 페니스톡 필터용",
 )
 
 # ------------------------------------------------------- 위험조정 수익 (샤프/소르티노)
@@ -82,10 +86,10 @@ def sortino_expr(days: int) -> Expr:
     return _RET.ma(days) / DownsideStd(_RET, days) * _ANN
 
 
-SHARPE = factor("SHARPE", sharpe_expr(252), category="price", label="샤프비율",
-                requires=_SEP)
-SORTINO = factor("SORTINO", sortino_expr(252), category="price", label="Sortino 비율",
-                 requires=_SEP)
+SHARPE = factor("SHARPE", sharpe_expr(252), category="price", label="샤프비율", requires=_SEP)
+SORTINO = factor(
+    "SORTINO", sortino_expr(252), category="price", label="Sortino 비율", requires=_SEP
+)
 
 _RISK_ADJ_WINDOWS = [20, 60, 120, 200]
 
@@ -140,8 +144,12 @@ class RSI(Expr):
 
 RSI_FACTORS = {
     p: factor(
-        f"RSI_{p}D", RSI(F.close, p), category="price", label=f"RSI ({p}일)",
-        direction=-1, requires=_SEP,
+        f"RSI_{p}D",
+        RSI(F.close, p),
+        category="price",
+        label=f"RSI ({p}일)",
+        direction=-1,
+        requires=_SEP,
         notes="과매수 회피 관점에서 낮을수록 좋음 — 방향은 IC 검증으로 확정할 것",
     )
     for p in (9, 14, 25)
@@ -180,15 +188,35 @@ def _benchmark_series(ctx: PanelContext, name: str, index: pd.Index) -> pd.Serie
     return series.reindex(index)
 
 
-BETA_252 = factor("BETA", Beta(_RET, 252), category="price", label="베타",
-                  direction=-1, requires=_SEP, notes="저베타 이상현상")
-BETA_60 = factor("BETA_60D", Beta(_RET, 60), category="price", label="베타 (60일)",
-                 direction=-1, requires=_SEP)
-ABS_BETA_252 = factor("ABS_BETA", abs(Beta(_RET, 252)), category="price",
-                      label="절대값 베타", direction=-1, requires=_SEP,
-                      notes="0 에 가까울수록 시장중립")
-ABS_BETA_60 = factor("ABS_BETA_60D", abs(Beta(_RET, 60)), category="price",
-                     label="절대값 베타 (60일)", direction=-1, requires=_SEP)
+BETA_252 = factor(
+    "BETA",
+    Beta(_RET, 252),
+    category="price",
+    label="베타",
+    direction=-1,
+    requires=_SEP,
+    notes="저베타 이상현상",
+)
+BETA_60 = factor(
+    "BETA_60D", Beta(_RET, 60), category="price", label="베타 (60일)", direction=-1, requires=_SEP
+)
+ABS_BETA_252 = factor(
+    "ABS_BETA",
+    abs(Beta(_RET, 252)),
+    category="price",
+    label="절대값 베타",
+    direction=-1,
+    requires=_SEP,
+    notes="0 에 가까울수록 시장중립",
+)
+ABS_BETA_60 = factor(
+    "ABS_BETA_60D",
+    abs(Beta(_RET, 60)),
+    category="price",
+    label="절대값 베타 (60일)",
+    direction=-1,
+    requires=_SEP,
+)
 
 # ------------------------------------------------------------------ 거래대금 회전율
 
@@ -200,5 +228,5 @@ TURNOVER = factor(
     direction=-1,
     requires=_SEP,
     notes="저회전율 프리미엄(유동성 프리미엄). 유동성 필터와 역할이 다름 — "
-          "필터는 체결 가능성, 이 팩터는 초과수익 원천",
+    "필터는 체결 가능성, 이 팩터는 초과수익 원천",
 )

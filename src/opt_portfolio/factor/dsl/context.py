@@ -31,7 +31,10 @@ class PanelContext:
     Args:
         quarterly: {필드명: (calendardate × ticker) 프레임}
         availability: (calendardate × ticker) 프레임. 각 셀의 공시일(datekey).
-            분기 데이터를 일별로 승격할 때의 유일한 기준.
+            분기 데이터를 일별로 승격할 때의 기본 기준.
+        availability_by_source: {소스명("SF1"/"SF3"/…): 공시일 프레임}.
+            소스마다 공시 지연이 다를 때 (13F 는 +45일) 필드별로 올바른
+            공시일을 쓰기 위한 오버라이드. 없는 소스는 기본값으로 폴백.
         daily: {필드명: (거래일 × ticker) 프레임}
         meta: {필드명: (ticker → 값) 시리즈}. 섹터·소재지 등 저빈도 속성.
         calendar: 일별 평가 캘린더 (거래일). 미지정 시 daily 프레임에서 추론.
@@ -42,12 +45,13 @@ class PanelContext:
     daily: dict[str, pd.DataFrame] = dc_field(default_factory=dict)
     meta: dict[str, pd.Series] = dc_field(default_factory=dict)
     calendar: pd.DatetimeIndex | None = None
+    availability_by_source: dict[str, pd.DataFrame] = dc_field(default_factory=dict)
 
-    # id(frame) → (원본 프레임, 승격 결과). 원본을 함께 보관해 GC 로 id 가
-    # 재사용되면서 엉뚱한 캐시가 히트하는 것을 막는다.
-    _promote_cache: dict[int, tuple[pd.DataFrame, pd.DataFrame]] = dc_field(
-        default_factory=dict, repr=False, compare=False
-    )
+    # (id(frame), id(avail)) → (원본 참조들, 승격 결과). 원본을 함께 보관해
+    # GC 로 id 가 재사용되면서 엉뚱한 캐시가 히트하는 것을 막는다.
+    _promote_cache: dict[
+        tuple[int, int], tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame]
+    ] = dc_field(default_factory=dict, repr=False, compare=False)
 
     # ------------------------------------------------------------------ 필드 접근
     def field(self, name: str) -> Panel:
@@ -59,7 +63,7 @@ class PanelContext:
                     f"분기 필드 '{name}' 이(가) 컨텍스트에 없습니다. "
                     f"프로바이더가 이 필드를 제공하는지 확인하세요."
                 )
-            return Panel(self.quarterly[name], "quarterly")
+            return Panel(self.quarterly[name], "quarterly", self._avail_for(spec.source))
 
         if name in self.daily:
             return Panel(self.daily[name], "daily")
@@ -75,33 +79,43 @@ class PanelContext:
     def field_kind(self, name: str) -> FieldKind:
         return get_field(name).kind
 
+    def _avail_for(self, source: str) -> pd.DataFrame | None:
+        """소스별 공시일 프레임 — 오버라이드 없으면 기본값."""
+        return self.availability_by_source.get(source, self.availability)
+
     # -------------------------------------------------------------- PIT 승격
-    def to_daily(self, quarterly: pd.DataFrame) -> pd.DataFrame:
+    def to_daily(self, quarterly: pd.DataFrame, avail: pd.DataFrame | None = None) -> pd.DataFrame:
         """
         분기 프레임을 일별 캘린더로 승격한다.
 
-        각 (일자 d, 종목 t) 에는 `datekey <= d` 를 만족하는 가장 최근 분기값이
+        각 (일자 d, 종목 t) 에는 `공시일 <= d` 를 만족하는 가장 최근 분기값이
         들어간다. 공시 전 분기 데이터는 절대 노출되지 않는다.
+
+        Args:
+            avail: 이 프레임에 적용할 셀별 공시일. 표현식 평가 경로에서는
+                Panel.avail (소스별 공시일이 BinOp 를 거치며 max 합성된 것)
+                이 넘어온다. None 이면 컨텍스트 기본값.
         """
-        if self.availability is None:
+        avail_frame = avail if avail is not None else self.availability
+        if avail_frame is None:
             raise MissingDataError(
                 "availability(datekey) 프레임이 없어 PIT 승격을 할 수 없습니다. "
                 "공시일 없이 분기 데이터를 일별로 펼치면 look-ahead 가 발생합니다."
             )
 
-        cache_key = id(quarterly)
+        cache_key = (id(quarterly), id(avail_frame))
         cached = self._promote_cache.get(cache_key)
-        if cached is not None and cached[0] is quarterly:
-            return cached[1]
+        if cached is not None and cached[0] is quarterly and cached[1] is avail_frame:
+            return cached[2]
 
         cal = self.trading_calendar
-        avail = self.availability.reindex(index=quarterly.index, columns=quarterly.columns)
+        avail_aligned = avail_frame.reindex(index=quarterly.index, columns=quarterly.columns)
         out = pd.DataFrame(np.nan, index=cal, columns=quarterly.columns, dtype="float64")
         cal_values = cal.to_numpy(dtype="datetime64[ns]")
 
         for ticker in quarterly.columns:
             values = quarterly[ticker].to_numpy(dtype="float64")
-            keys = pd.to_datetime(avail[ticker]).to_numpy(dtype="datetime64[ns]")
+            keys = pd.to_datetime(avail_aligned[ticker]).to_numpy(dtype="datetime64[ns]")
 
             valid = ~pd.isna(keys)
             if not valid.any():
@@ -116,8 +130,20 @@ class PanelContext:
             picked = np.where(pos >= 0, values[np.clip(pos, 0, None)], np.nan)
             out[ticker] = picked
 
-        self._promote_cache[cache_key] = (quarterly, out)
+        self._promote_cache[cache_key] = (quarterly, avail_frame, out)
         return out
+
+    def eval_daily(self, expr: object) -> pd.DataFrame:
+        """
+        표현식을 평가해 일별 그리드 프레임으로 돌려준다.
+
+        분기 그리드 결과는 자신의 공시일(avail)로 승격된다 — 파이프라인과
+        유니버스 필터가 쓰는 표준 진입점.
+        """
+        panel = expr.eval(self)  # type: ignore[attr-defined]
+        if panel.grid == "daily":
+            return panel.data
+        return self.to_daily(panel.data, panel.avail)
 
     @property
     def trading_calendar(self) -> pd.DatetimeIndex:
@@ -173,9 +199,7 @@ class PanelContext:
         return design
 
     # ------------------------------------------------------------------ 내부
-    def _aligned_daily(
-        self, name: str, index: pd.Index, columns: pd.Index
-    ) -> pd.DataFrame:
+    def _aligned_daily(self, name: str, index: pd.Index, columns: pd.Index) -> pd.DataFrame:
         if name not in self.daily:
             raise MissingDataError(f"통제변수 '{name}' 이(가) daily 에 없습니다.")
         return self.daily[name].reindex(index=index, columns=columns)

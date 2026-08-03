@@ -63,9 +63,9 @@ class ICSummary:
 
     mean: float
     std: float
-    ir: float          # IC-IR = mean / std
-    t_stat: float      # 겹침 보정 유효 표본 기준
-    hit_rate: float    # IC > 0 인 날짜 비율
+    ir: float  # IC-IR = mean / std
+    t_stat: float  # 겹침 보정 유효 표본 기준
+    hit_rate: float  # IC > 0 인 날짜 비율
     n_obs: int
 
     def is_significant(self, threshold: float = 2.0) -> bool:

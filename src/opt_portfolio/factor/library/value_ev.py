@@ -18,8 +18,7 @@ from opt_portfolio.factor.dsl.registry import factor
 #: 벤더 제공 `ev` 대신 자체 계산 — 벤더 간 정의 차이를 흡수한다.
 EV_EXPR = F.mcap + F.debt - F.cashneq
 
-EV = factor("EV", EV_EXPR, category="value_ev", label="EV", direction=-1,
-            requires=("SF1", "SEP"))
+EV = factor("EV", EV_EXPR, category="value_ev", label="EV", direction=-1, requires=("SF1", "SEP"))
 
 #: (팩터명, 분모 표현식, 한글 라벨, 비고)
 _EV_MULTIPLES = [

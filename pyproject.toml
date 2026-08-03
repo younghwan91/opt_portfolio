@@ -41,6 +41,7 @@ dependencies = [
     "plotly>=5.15.0",
     "scipy>=1.10.0",
     "tenacity>=8.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +53,7 @@ dev = [
     "isort>=5.12.0",
     "mypy>=1.0.0",
     "ruff>=0.4.0",
+    "types-requests>=2.31.0",
 ]
 
 [project.urls]
@@ -61,6 +63,7 @@ Repository = "https://github.com/yourusername/opt_portfolio.git"
 
 [project.scripts]
 opt-portfolio = "opt_portfolio.ui.cli:main"
+opt-factor = "opt_portfolio.factor.cli:main"
 
 [build-system]
 requires = ["hatchling"]

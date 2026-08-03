@@ -1,0 +1,371 @@
+"""
+PIT 스토어 — DuckDB 기반 bitemporal 저장소
+
+테이블 구조 (전부 정규화 필드명 — 벤더 이름은 어댑터에서 끝난다):
+
+| 테이블 | 키 | 내용 |
+|---|---|---|
+| fundamentals | (ticker, calendardate, dimension) | SF1 분기 재무 + datekey |
+| ownership | (ticker, calendardate) | 13F/내부자 집계 + datekey |
+| estimates | (ticker, calendardate) | 애널리스트 추정치 + datekey |
+| prices | (ticker, date) | 일별 가격·거래량·시총 |
+| tickers | (ticker) | 섹터·소재지·유형 메타 |
+
+퀀트 관점:
+- 같은 (ticker, calendardate) 에 공시가 여러 번 오면 (정정공시)
+  **최초 datekey 의 값**을 유지한다 — 시장이 처음 본 숫자가 백테스트가
+  봐야 하는 숫자다. 정정치를 쓰면 look-ahead 다.
+- build_context() 는 소스별 datekey 를 분리해 넘긴다. 13F(+45일)와
+  실적공시의 지연 차이가 표현식 트리의 avail 전파로 이어진다.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+import duckdb
+import pandas as pd
+
+from opt_portfolio.factor.data import schema
+from opt_portfolio.factor.dsl.context import PanelContext
+
+logger = logging.getLogger(__name__)
+
+
+def _quarterly_fields(sources: tuple[str, ...]) -> list[str]:
+    return sorted(
+        s.name for s in schema.FIELDS.values() if s.grid == "quarterly" and s.source in sources
+    )
+
+
+FUND_FIELDS = _quarterly_fields(("SF1",))
+OWNERSHIP_FIELDS = _quarterly_fields(("SF2", "SF3"))
+ESTIMATE_FIELDS = _quarterly_fields(("FMP",))
+PRICE_FIELDS = sorted(
+    s.name for s in schema.FIELDS.values() if s.grid == "daily" and s.kind in ("price", "stock")
+)
+META_FIELDS = sorted(s.name for s in schema.FIELDS.values() if s.kind == "meta") + ["name"]
+
+
+class PITStore:
+    """벤더 중립 point-in-time 저장소."""
+
+    def __init__(self, path: str | Path = ":memory:") -> None:
+        self.path = str(path)
+        self.conn = duckdb.connect(self.path)
+        self._init_schema()
+
+    def close(self) -> None:
+        self.conn.close()
+
+    def __enter__(self) -> PITStore:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    # ------------------------------------------------------------------ DDL
+    def _init_schema(self) -> None:
+        def cols(fields: list[str]) -> str:
+            return ", ".join(f'"{f}" DOUBLE' for f in fields)
+
+        self.conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS fundamentals (
+                ticker VARCHAR NOT NULL,
+                calendardate DATE NOT NULL,
+                datekey DATE NOT NULL,
+                dimension VARCHAR NOT NULL DEFAULT 'ARQ',
+                {cols(FUND_FIELDS)}
+            )
+            """
+        )
+        self.conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS ownership (
+                ticker VARCHAR NOT NULL,
+                calendardate DATE NOT NULL,
+                datekey DATE NOT NULL,
+                {cols(OWNERSHIP_FIELDS)}
+            )
+            """
+        )
+        self.conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS estimates (
+                ticker VARCHAR NOT NULL,
+                calendardate DATE NOT NULL,
+                datekey DATE NOT NULL,
+                {cols(ESTIMATE_FIELDS)}
+            )
+            """
+        )
+        self.conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS prices (
+                ticker VARCHAR NOT NULL,
+                date DATE NOT NULL,
+                {cols(PRICE_FIELDS)}
+            )
+            """
+        )
+        meta_cols = ", ".join(f'"{f}" VARCHAR' for f in META_FIELDS)
+        self.conn.execute(
+            f"CREATE TABLE IF NOT EXISTS tickers (ticker VARCHAR NOT NULL, {meta_cols})"
+        )
+
+    # ---------------------------------------------------------------- 업서트
+    def upsert_fundamentals(self, df: pd.DataFrame) -> int:
+        """정규화된 분기 재무를 업서트. 필수 컬럼: ticker/calendardate/datekey."""
+        return self._upsert(
+            "fundamentals",
+            df,
+            keys=("ticker", "calendardate", "dimension"),
+            fields=FUND_FIELDS,
+            defaults={"dimension": schema.DEFAULT_DIMENSION},
+        )
+
+    def upsert_ownership(self, df: pd.DataFrame) -> int:
+        return self._upsert(
+            "ownership", df, keys=("ticker", "calendardate"), fields=OWNERSHIP_FIELDS
+        )
+
+    def upsert_estimates(self, df: pd.DataFrame) -> int:
+        return self._upsert(
+            "estimates", df, keys=("ticker", "calendardate"), fields=ESTIMATE_FIELDS
+        )
+
+    def upsert_prices(self, df: pd.DataFrame) -> int:
+        return self._upsert(
+            "prices", df, keys=("ticker", "date"), fields=PRICE_FIELDS, has_datekey=False
+        )
+
+    def upsert_tickers(self, df: pd.DataFrame) -> int:
+        return self._upsert(
+            "tickers",
+            df,
+            keys=("ticker",),
+            fields=META_FIELDS,
+            has_datekey=False,
+            string_fields=True,
+        )
+
+    def _upsert(
+        self,
+        table: str,
+        df: pd.DataFrame,
+        *,
+        keys: tuple[str, ...],
+        fields: list[str],
+        defaults: dict[str, str] | None = None,
+        has_datekey: bool = True,
+        string_fields: bool = False,
+    ) -> int:
+        if df.empty:
+            return 0
+        frame = df.copy()
+        for col, value in (defaults or {}).items():
+            if col not in frame.columns:
+                frame[col] = value
+
+        required = list(keys) + (["datekey"] if has_datekey else [])
+        missing = [c for c in required if c not in frame.columns]
+        if missing:
+            raise ValueError(f"{table} 업서트에 필수 컬럼 누락: {missing}")
+
+        present_fields = [f for f in fields if f in frame.columns]
+        all_cols = required + present_fields
+        frame = frame[all_cols]
+        if not string_fields:
+            for f in present_fields:
+                frame[f] = pd.to_numeric(frame[f], errors="coerce")
+
+        # 같은 키의 재공시(정정)는 최초 datekey 를 유지한다 — PIT 원칙
+        sort_cols = required if has_datekey else list(keys)
+        frame = (
+            frame.sort_values(sort_cols)
+            .drop_duplicates(subset=list(keys), keep="first")
+            .reset_index(drop=True)
+        )
+
+        self.conn.register("_incoming", frame)
+        key_match = " AND ".join(f"t.{k} = i.{k}" for k in keys)
+        # 기존 행이 있으면 유지 (최초 공시 우선), 없는 행만 삽입
+        col_list = ", ".join(f'"{c}"' for c in all_cols)
+        result = self.conn.execute(
+            f"""
+            INSERT INTO {table} ({col_list})
+            SELECT {col_list} FROM _incoming i
+            WHERE NOT EXISTS (SELECT 1 FROM {table} t WHERE {key_match})
+            """
+        ).fetchone()
+        self.conn.unregister("_incoming")
+        count = int(result[0]) if result else 0  # DuckDB INSERT 는 삽입 행수를 반환
+        logger.info("%s: %d행 삽입 (%d행 수신)", table, count, len(df))
+        return count
+
+    # ------------------------------------------------------------ 컨텍스트 조립
+    def build_context(
+        self,
+        start: str | pd.Timestamp | None = None,
+        end: str | pd.Timestamp | None = None,
+        tickers: list[str] | None = None,
+        benchmark: str | None = None,
+    ) -> PanelContext:
+        """
+        저장소 → PanelContext.
+
+        Args:
+            benchmark: 지정 시 해당 티커의 일별 수익률을
+                meta['benchmark_return'] 으로 넣는다 (베타 팩터·타이밍용).
+        """
+        quarterly: dict[str, pd.DataFrame] = {}
+        avail_by_source: dict[str, pd.DataFrame] = {}
+
+        fund, fund_avail = self._load_quarterly(
+            "fundamentals", FUND_FIELDS, tickers, extra="dimension = 'ARQ'"
+        )
+        quarterly.update(fund)
+        if fund_avail is not None:
+            avail_by_source["SF1"] = fund_avail
+
+        own, own_avail = self._load_quarterly("ownership", OWNERSHIP_FIELDS, tickers)
+        quarterly.update(own)
+        if own_avail is not None:
+            avail_by_source["SF2"] = own_avail
+            avail_by_source["SF3"] = own_avail
+
+        est, est_avail = self._load_quarterly("estimates", ESTIMATE_FIELDS, tickers)
+        quarterly.update(est)
+        if est_avail is not None:
+            avail_by_source["FMP"] = est_avail
+
+        daily = self._load_prices(start, end, tickers)
+        meta = self._load_meta()
+
+        calendar = None
+        for frame in daily.values():
+            calendar = pd.DatetimeIndex(frame.index)
+            break
+
+        if benchmark and "close" in daily and benchmark in daily["close"].columns:
+            meta["benchmark_return"] = daily["close"][benchmark].pct_change(fill_method=None)
+
+        return PanelContext(
+            quarterly=quarterly,
+            availability=fund_avail,
+            availability_by_source=avail_by_source,
+            daily=daily,
+            meta=meta,
+            calendar=calendar,
+        )
+
+    def _load_quarterly(
+        self,
+        table: str,
+        fields: list[str],
+        tickers: list[str] | None,
+        extra: str | None = None,
+    ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame | None]:
+        where, params = self._where(tickers=tickers, extra=extra)
+        raw = self.conn.execute(
+            f"SELECT * FROM {table} {where} ORDER BY ticker, calendardate", params
+        ).df()
+        if raw.empty:
+            return {}, None
+
+        raw["calendardate"] = pd.to_datetime(raw["calendardate"])
+        raw["datekey"] = pd.to_datetime(raw["datekey"])
+
+        frames = {}
+        for f in fields:
+            if f in raw.columns and raw[f].notna().any():
+                frames[f] = raw.pivot_table(
+                    index="calendardate", columns="ticker", values=f, aggfunc="first"
+                )
+        avail = raw.pivot_table(
+            index="calendardate", columns="ticker", values="datekey", aggfunc="min"
+        )
+        return frames, avail
+
+    def _load_prices(
+        self,
+        start: str | pd.Timestamp | None,
+        end: str | pd.Timestamp | None,
+        tickers: list[str] | None,
+    ) -> dict[str, pd.DataFrame]:
+        clauses, params = [], []
+        if tickers:
+            clauses.append(f"ticker IN ({', '.join('?' * len(tickers))})")
+            params.extend(tickers)
+        if start is not None:
+            clauses.append("date >= ?")
+            params.append(str(pd.Timestamp(start).date()))
+        if end is not None:
+            clauses.append("date <= ?")
+            params.append(str(pd.Timestamp(end).date()))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        raw = self.conn.execute(f"SELECT * FROM prices {where} ORDER BY date", params).df()
+        if raw.empty:
+            return {}
+        raw["date"] = pd.to_datetime(raw["date"])
+
+        return {
+            f: raw.pivot_table(index="date", columns="ticker", values=f, aggfunc="first")
+            for f in PRICE_FIELDS
+            if f in raw.columns and raw[f].notna().any()
+        }
+
+    def _load_meta(self) -> dict[str, pd.Series]:
+        raw = self.conn.execute("SELECT * FROM tickers").df()
+        if raw.empty:
+            return {}
+        raw = raw.set_index("ticker")
+        return {f: raw[f] for f in META_FIELDS if f in raw.columns}
+
+    @staticmethod
+    def _where(tickers: list[str] | None, extra: str | None) -> tuple[str, list[str]]:
+        clauses, params = [], []
+        if tickers:
+            clauses.append(f"ticker IN ({', '.join('?' * len(tickers))})")
+            params.extend(tickers)
+        if extra:
+            clauses.append(extra)
+        return (f"WHERE {' AND '.join(clauses)}" if clauses else ""), params
+
+    # ------------------------------------------------------------------ 상태
+    def coverage(self) -> pd.DataFrame:
+        """테이블별 행수·기간 — CLI status 와 수동 점검용."""
+        rows = []
+        for table, date_col in [
+            ("fundamentals", "calendardate"),
+            ("ownership", "calendardate"),
+            ("estimates", "calendardate"),
+            ("prices", "date"),
+        ]:
+            r = self.conn.execute(
+                f"SELECT COUNT(*), COUNT(DISTINCT ticker), MIN({date_col}), "
+                f"MAX({date_col}) FROM {table}"
+            ).fetchone() or (0, 0, None, None)
+            rows.append(
+                {
+                    "table": table,
+                    "rows": r[0],
+                    "tickers": r[1],
+                    "first": r[2],
+                    "last": r[3],
+                }
+            )
+        n_meta = self.conn.execute("SELECT COUNT(*) FROM tickers").fetchone()
+        rows.append(
+            {
+                "table": "tickers",
+                "rows": n_meta[0] if n_meta else 0,
+                "tickers": n_meta[0] if n_meta else 0,
+                "first": None,
+                "last": None,
+            }
+        )
+        return pd.DataFrame(rows)

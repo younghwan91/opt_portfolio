@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from opt_portfolio.factor.dsl.expr import F
-from opt_portfolio.factor.dsl.registry import derive_ttm, factor
+from opt_portfolio.factor.dsl.registry import factor
 
 _SF1 = ("SF1",)
 _SF1_SEP = ("SF1", "SEP")
@@ -20,39 +20,130 @@ _SF1_SEP = ("SF1", "SEP")
 
 ROE = factor("ROE", F.netinc / F.equityavg, category="quality", label="ROE", requires=_SF1)
 ROA = factor("ROA", F.netinc / F.assetsavg, category="quality", label="ROA", requires=_SF1)
-ROE_TTM = derive_ttm(ROE)
-ROA_TTM = derive_ttm(ROA)
+# TTM 비율 = ttm(분자)/분모 — ttm(비율)은 '분기 비율의 합'이라 의미가 다르다
+ROE_TTM = factor(
+    "ROE_TTM",
+    F.netinc.ttm() / F.equityavg,
+    category="quality",
+    label="ROE (TTM)",
+    requires=_SF1,
+    derived_from="ROE",
+)
+ROA_TTM = factor(
+    "ROA_TTM",
+    F.netinc.ttm() / F.assetsavg,
+    category="quality",
+    label="ROA (TTM)",
+    requires=_SF1,
+    derived_from="ROA",
+)
 
-ROIC = factor("ROIC", (F.ebit - F.taxexp) / F.invcapavg, category="quality",
-              label="ROIC", requires=_SF1, notes="NOPAT / 평균 투하자본")
-GPIC = factor("GPIC", F.gp / F.invcapavg, category="quality", label="GPIC",
-              requires=_SF1, notes="[정의 추정] 매출총이익 / 투하자본")
-RIC = factor("RIC", F.rnd / F.invcapavg, category="quality", label="RIC",
-             neutralize=("sector",), requires=_SF1,
-             notes="[정의 추정] 연구개발비 / 투하자본")
+ROIC = factor(
+    "ROIC",
+    (F.ebit - F.taxexp) / F.invcapavg,
+    category="quality",
+    label="ROIC",
+    requires=_SF1,
+    notes="NOPAT / 평균 투하자본",
+)
+GPIC = factor(
+    "GPIC",
+    F.gp / F.invcapavg,
+    category="quality",
+    label="GPIC",
+    requires=_SF1,
+    notes="[정의 추정] 매출총이익 / 투하자본",
+)
+RIC = factor(
+    "RIC",
+    F.rnd / F.invcapavg,
+    category="quality",
+    label="RIC",
+    neutralize=("sector",),
+    requires=_SF1,
+    notes="[정의 추정] 연구개발비 / 투하자본",
+)
 
 GP_E = factor("GP_E", F.gp / F.equity, category="quality", label="GP/E", requires=_SF1)
-GP_A = factor("GP_A", F.gp / F.assets, category="quality", label="GP/A", requires=_SF1,
-              notes="Novy-Marx 총이익성 — 미장 최강 퀄리티 팩터")
-GP_A_TTM = derive_ttm(GP_A)
+GP_A = factor(
+    "GP_A",
+    F.gp / F.assets,
+    category="quality",
+    label="GP/A",
+    requires=_SF1,
+    notes="Novy-Marx 총이익성 — 미장 최강 퀄리티 팩터",
+)
+GP_A_TTM = factor(
+    "GP_A_TTM",
+    F.gp.ttm() / F.assets,
+    category="quality",
+    label="GP/A (TTM)",
+    requires=_SF1,
+    derived_from="GP_A",
+)
 
-GP_IT = factor("GP_IT", F.gp / F.intangibles, category="quality", label="GP/IT",
-               neutralize=("sector",), requires=_SF1, notes="[정의 추정] / 무형자산")
-OP_IT = factor("OP_IT", F.opinc / F.intangibles, category="quality", label="OP/IT",
-               neutralize=("sector",), requires=_SF1, notes="[정의 추정] / 무형자산")
-ROIT = factor("ROIT", F.netinc / F.intangibles, category="quality", label="ROIT",
-              neutralize=("sector",), requires=_SF1, notes="[정의 추정] / 무형자산")
+GP_IT = factor(
+    "GP_IT",
+    F.gp / F.intangibles,
+    category="quality",
+    label="GP/IT",
+    neutralize=("sector",),
+    requires=_SF1,
+    notes="[정의 추정] / 무형자산",
+)
+OP_IT = factor(
+    "OP_IT",
+    F.opinc / F.intangibles,
+    category="quality",
+    label="OP/IT",
+    neutralize=("sector",),
+    requires=_SF1,
+    notes="[정의 추정] / 무형자산",
+)
+ROIT = factor(
+    "ROIT",
+    F.netinc / F.intangibles,
+    category="quality",
+    label="ROIT",
+    neutralize=("sector",),
+    requires=_SF1,
+    notes="[정의 추정] / 무형자산",
+)
 
-ROCE = factor("ROCE", F.ebit / (F.assets - F.liabilitiesc), category="quality",
-              label="ROCE", requires=_SF1, notes="EBIT / (총자산 − 유동부채)")
+ROCE = factor(
+    "ROCE",
+    F.ebit / (F.assets - F.liabilitiesc),
+    category="quality",
+    label="ROCE",
+    requires=_SF1,
+    notes="EBIT / (총자산 − 유동부채)",
+)
 
 # ------------------------------------------------------------- 회전율 · 마진
 
-IT_TURNOVER = factor("IT_TURNOVER", F.revenue / F.intangibles, category="quality",
-                     label="무형자산 Turnover", neutralize=("sector",), requires=_SF1)
-ASSET_TURNOVER = factor("ASSET_TURNOVER", F.revenue / F.assetsavg, category="quality",
-                        label="Asset Turnover", requires=_SF1)
-ASSET_TURNOVER_TTM = derive_ttm(ASSET_TURNOVER)
+IT_TURNOVER = factor(
+    "IT_TURNOVER",
+    F.revenue / F.intangibles,
+    category="quality",
+    label="무형자산 Turnover",
+    neutralize=("sector",),
+    requires=_SF1,
+)
+ASSET_TURNOVER = factor(
+    "ASSET_TURNOVER",
+    F.revenue / F.assetsavg,
+    category="quality",
+    label="Asset Turnover",
+    requires=_SF1,
+)
+ASSET_TURNOVER_TTM = factor(
+    "ASSET_TURNOVER_TTM",
+    F.revenue.ttm() / F.assetsavg,
+    category="quality",
+    label="Asset Turnover (TTM)",
+    requires=_SF1,
+    derived_from="ASSET_TURNOVER",
+)
 
 GPM = factor("GPM", F.gp / F.revenue, category="quality", label="GPM", requires=_SF1)
 OPM = factor("OPM", F.opinc / F.revenue, category="quality", label="OPM", requires=_SF1)
@@ -68,9 +159,15 @@ _RND_RATIOS = [
 ]
 
 RND_FACTORS = {
-    name: factor(name, F.rnd / denom, category="quality", label=label,
-                 neutralize=("sector",), requires=_SF1,
-                 notes="섹터 중립화 없이는 기술주 섹터 베팅과 구분 불가")
+    name: factor(
+        name,
+        F.rnd / denom,
+        category="quality",
+        label=label,
+        neutralize=("sector",),
+        requires=_SF1,
+        notes="섹터 중립화 없이는 기술주 섹터 베팅과 구분 불가",
+    )
     for name, denom, label in _RND_RATIOS
 }
 
@@ -78,29 +175,63 @@ RND_FACTORS = {
 
 _ACCRUAL = F.netinc - F.ncfo
 
-AC_A = factor("AC_A", _ACCRUAL / F.assetsavg, category="quality", label="AC/A",
-              direction=-1, requires=_SF1, notes="Sloan(1996) 발생액 이상현상")
-AC_E = factor("AC_E", _ACCRUAL / F.equityavg, category="quality", label="AC/E",
-              direction=-1, requires=_SF1)
+AC_A = factor(
+    "AC_A",
+    _ACCRUAL / F.assetsavg,
+    category="quality",
+    label="AC/A",
+    direction=-1,
+    requires=_SF1,
+    notes="Sloan(1996) 발생액 이상현상",
+)
+AC_E = factor(
+    "AC_E", _ACCRUAL / F.equityavg, category="quality", label="AC/E", direction=-1, requires=_SF1
+)
 
 # ------------------------------------------------------------- 안정성 · 재무구조
 
 _DAILY_RET = F.close.pct_change(1)
 
-VOL_52W = factor("VOL_52W", _DAILY_RET.rolling_std(252) * (252 ** 0.5), category="quality",
-                 label="변동성 (52주)", direction=-1, requires=("SEP",),
-                 notes="저변동성 이상현상 — 낮을수록 좋음")
-VOL_60D = factor("VOL_60D", _DAILY_RET.rolling_std(60) * (252 ** 0.5), category="quality",
-                 label="변동성 (60일)", direction=-1, requires=("SEP",))
+VOL_52W = factor(
+    "VOL_52W",
+    _DAILY_RET.rolling_std(252) * (252**0.5),
+    category="quality",
+    label="변동성 (52주)",
+    direction=-1,
+    requires=("SEP",),
+    notes="저변동성 이상현상 — 낮을수록 좋음",
+)
+VOL_60D = factor(
+    "VOL_60D",
+    _DAILY_RET.rolling_std(60) * (252**0.5),
+    category="quality",
+    label="변동성 (60일)",
+    direction=-1,
+    requires=("SEP",),
+)
 
-OPINC_DEBT = factor("OPINC_DEBT", F.opinc / F.debt, category="quality",
-                    label="영업이익 / 차입금", requires=_SF1, notes="이자보상배율 근사")
-DEBT_RATIO = factor("DEBT_RATIO", F.debt / F.equity, category="quality",
-                    label="차입금비율", direction=-1, requires=_SF1)
-RETENTION = factor("RETENTION", F.retearn / F.equity, category="quality",
-                   label="유보율", requires=_SF1)
-CURRENT_RATIO = factor("CURRENT_RATIO", F.assetsc / F.liabilitiesc, category="quality",
-                       label="유동비율", requires=_SF1)
+OPINC_DEBT = factor(
+    "OPINC_DEBT",
+    F.opinc / F.debt,
+    category="quality",
+    label="영업이익 / 차입금",
+    requires=_SF1,
+    notes="이자보상배율 근사",
+)
+DEBT_RATIO = factor(
+    "DEBT_RATIO",
+    F.debt / F.equity,
+    category="quality",
+    label="차입금비율",
+    direction=-1,
+    requires=_SF1,
+)
+RETENTION = factor(
+    "RETENTION", F.retearn / F.equity, category="quality", label="유보율", requires=_SF1
+)
+CURRENT_RATIO = factor(
+    "CURRENT_RATIO", F.assetsc / F.liabilitiesc, category="quality", label="유동비율", requires=_SF1
+)
 
 # 이익변동성: 자산대비 이익률의 20분기 표준편차. 분기 그리드에서 계산하므로
 # rolling_std(일별 전용) 대신 표현식 조합이 아니라 전용 노드가 필요하다 →
@@ -124,11 +255,22 @@ from opt_portfolio.factor.library._composites import (  # noqa: E402
     piotroski_f_expr,
 )
 
-F_SCORE = factor("F_SCORE", piotroski_f_expr(), category="quality", label="F-score",
-                 winsor=0.0, requires=_SF1,
-                 notes="Piotroski 9개 이진 항목 합 (0~9). 이산값이라 윈저라이즈 미적용")
+F_SCORE = factor(
+    "F_SCORE",
+    piotroski_f_expr(),
+    category="quality",
+    label="F-score",
+    winsor=0.0,
+    requires=_SF1,
+    notes="Piotroski 9개 이진 항목 합 (0~9). 이산값이라 윈저라이즈 미적용",
+)
 
-ALTMAN_Z = factor("ALTMAN_Z", altman_z_expr(), category="quality", label="Altman Z-score",
-                  requires=_SF1_SEP,
-                  notes="Z < 1.81 부실 위험. '관리종목 제외' 필터의 미장 대체재. "
-                        "금융업에는 부적용 → 금융주 제외 유니버스 전제")
+ALTMAN_Z = factor(
+    "ALTMAN_Z",
+    altman_z_expr(),
+    category="quality",
+    label="Altman Z-score",
+    requires=_SF1_SEP,
+    notes="Z < 1.81 부실 위험. '관리종목 제외' 필터의 미장 대체재. "
+    "금융업에는 부적용 → 금융주 제외 유니버스 전제",
+)

@@ -143,9 +143,7 @@ def search(
     raise ValueError(f"알 수 없는 탐색 방법: {method}")
 
 
-def _evaluate_all(
-    evaluate: Callable[[Params], float], candidates: list[Params]
-) -> SearchResult:
+def _evaluate_all(evaluate: Callable[[Params], float], candidates: list[Params]) -> SearchResult:
     trials = [Trial(p, _safe_eval(evaluate, p)) for p in candidates]
     best = max(trials, key=lambda t: t.objective)
     return SearchResult(best.params, best.objective, trials)
@@ -191,9 +189,7 @@ def _has_finite(trials: list[Trial]) -> bool:
     return any(np.isfinite(t.objective) for t in trials)
 
 
-def _propose_ei(
-    trials: list[Trial], space: ParamSpace, rng: np.random.Generator
-) -> Params:
+def _propose_ei(trials: list[Trial], space: ParamSpace, rng: np.random.Generator) -> Params:
     done = [t for t in trials if np.isfinite(t.objective)]
     x_obs = np.stack([_encode(t.params, space) for t in done])
     y_obs = np.asarray([t.objective for t in done])
@@ -222,4 +218,4 @@ def _propose_ei(
 
 def _rbf(a: np.ndarray, b: np.ndarray, length_scale: float) -> np.ndarray:
     d2 = ((a[:, None, :] - b[None, :, :]) ** 2).sum(axis=-1)
-    return np.exp(-0.5 * d2 / length_scale**2)
+    return np.asarray(np.exp(-0.5 * d2 / length_scale**2))

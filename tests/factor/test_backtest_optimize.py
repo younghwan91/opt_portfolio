@@ -40,9 +40,7 @@ class TestEngine:
         # 첫 체결 이후 구간에서 포트폴리오 수익률 == 자산 수익률
         active = result.returns[result.returns != 0.0]
         asset = close["A"].pct_change().reindex(active.index)
-        pd.testing.assert_series_equal(
-            active, asset, check_names=False, atol=1e-12, rtol=0.0
-        )
+        pd.testing.assert_series_equal(active, asset, check_names=False, atol=1e-12, rtol=0.0)
 
     def test_no_lookahead_signal_jump_not_captured(self) -> None:
         """신호일에 이미 발생한 점프 수익을 포트폴리오가 얻으면 안 된다."""
@@ -53,7 +51,7 @@ class TestEngine:
 
         # 점프 당일부터 A 를 최상위로 미는 스코어 (신호가 점프를 '알고' 있음)
         scores = pd.DataFrame(0.0, index=DATES, columns=["A", "B"])
-        scores.loc[DATES[jump_day]:, "A"] = 10.0
+        scores.loc[DATES[jump_day] :, "A"] = 10.0
         scores["B"] = 1.0
 
         result = run_backtest(
@@ -70,9 +68,7 @@ class TestEngine:
             index=DATES,
             columns=[f"T{i}" for i in range(10)],
         )
-        scores = pd.DataFrame(
-            RNG.normal(size=close.shape), index=DATES, columns=close.columns
-        )
+        scores = pd.DataFrame(RNG.normal(size=close.shape), index=DATES, columns=close.columns)
         base = BacktestConfig(n_stocks=3, rebalance="ME", cost=CostModel.zero())
         costly = BacktestConfig(
             n_stocks=3, rebalance="ME", cost=CostModel(commission_bps=50, slippage_bps=50)
@@ -110,9 +106,7 @@ class TestEngine:
 
 class TestTiming:
     def test_exposure_zero_below_ma(self) -> None:
-        price = pd.Series(
-            np.linspace(100, 50, 300), index=pd.date_range("2020-01-01", periods=300)
-        )
+        price = pd.Series(np.linspace(100, 50, 300), index=pd.date_range("2020-01-01", periods=300))
         exp = momentum_exposure(price, ma_days=50)
         assert (exp.iloc[60:] == 0.0).all()  # 하락 추세 → 이평 하회 → 현금
 
@@ -158,9 +152,7 @@ class TestSearch:
         assert len(combos) == 3 * 2 * 3
 
     def test_bayesian_concentrates_near_optimum(self) -> None:
-        result = search(
-            self._objective, self.SPACE, method="bayesian", n_trials=40, seed=3
-        )
+        result = search(self._objective, self.SPACE, method="bayesian", n_trials=40, seed=3)
         assert abs(result.best_params["x"] - 0.7) < 0.15
         assert result.best_params["mode"] == "fast"
         assert result.n_trials == 40  # 전 시도가 기록되었는가
@@ -173,7 +165,7 @@ class TestSearch:
 
         result = search(flaky, self.SPACE, method="random", n_trials=20, seed=1)
         objs = result.objectives()
-        assert np.isneginf(objs).any()      # 실패도 기록
+        assert np.isneginf(objs).any()  # 실패도 기록
         assert np.isfinite(result.best_objective)
 
 

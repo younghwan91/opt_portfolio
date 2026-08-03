@@ -21,10 +21,10 @@ import pandas as pd
 class CostModel:
     """리밸런싱 1회당 거래 비용률 계산기."""
 
-    commission_bps: float = 5.0    # 편도 수수료
-    slippage_bps: float = 10.0     # 호가 스프레드 + 체결 지연
-    impact_coeff: float = 0.0      # √충격 계수 (0 = 비활성)
-    portfolio_value: float = 0.0   # 운용 규모 USD (충격 계산에만 사용)
+    commission_bps: float = 5.0  # 편도 수수료
+    slippage_bps: float = 10.0  # 호가 스프레드 + 체결 지연
+    impact_coeff: float = 0.0  # √충격 계수 (0 = 비활성)
+    portfolio_value: float = 0.0  # 운용 규모 USD (충격 계산에만 사용)
 
     @property
     def linear_rate(self) -> float:

@@ -88,8 +88,8 @@ def deflated_sharpe_ratio(
 
 @dataclass(frozen=True)
 class PBOResult:
-    pbo: float                 # OOS 순위가 중앙값 미만인 빈도
-    logits: np.ndarray         # 조합별 λ = ln(ω/(1−ω))
+    pbo: float  # OOS 순위가 중앙값 미만인 빈도
+    logits: np.ndarray  # 조합별 λ = ln(ω/(1−ω))
     n_splits: int
     oos_sharpe_of_is_best: np.ndarray  # IS 최적 전략의 OOS Sharpe 분포
 
@@ -135,14 +135,12 @@ def probability_of_backtest_overfitting(
     def _sharpe(block: np.ndarray) -> np.ndarray:
         mu = block.mean(axis=0)
         sd = block.std(axis=0, ddof=1)
-        return np.divide(mu, sd, out=np.zeros_like(mu), where=sd > 0)
+        return np.asarray(np.divide(mu, sd, out=np.zeros_like(mu), where=sd > 0))
 
     logits, oos_sr_best = [], []
     for combo in all_combos:
         is_rows = np.concatenate([blocks[b] for b in combo])
-        oos_rows = np.concatenate(
-            [blocks[b] for b in range(n_blocks) if b not in combo]
-        )
+        oos_rows = np.concatenate([blocks[b] for b in range(n_blocks) if b not in combo])
         best = int(np.argmax(_sharpe(m[is_rows])))
         oos_sr = _sharpe(m[oos_rows])
         # OOS 상대순위 ω ∈ (0,1): 1 이면 OOS 에서도 1등

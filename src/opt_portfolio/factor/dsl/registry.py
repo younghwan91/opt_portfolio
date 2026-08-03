@@ -104,7 +104,8 @@ class FactorRegistry:
     def available(self, subscribed: Iterable[str]) -> list[FactorSpec]:
         """구독 중인 데이터셋만으로 계산 가능한 팩터."""
         have = frozenset(subscribed)
-        usable, skipped = [], []
+        usable: list[FactorSpec] = []
+        skipped: list[FactorSpec] = []
         for spec in self._specs.values():
             (usable if spec.requires <= have else skipped).append(spec)
         if skipped:
@@ -160,22 +161,10 @@ def factor(
 # ------------------------------------------------------------------ 자동 파생
 
 
-def derive_ttm(base: FactorSpec, *, name: str | None = None, label: str = "") -> FactorSpec:
-    """base 팩터의 TTM 변형을 등록한다."""
-    return REGISTRY.register(
-        FactorSpec(
-            name=name or f"{base.name}_TTM",
-            category=base.category,
-            expr=base.expr.ttm(),
-            label=label or f"{base.label} (TTM)",
-            direction=base.direction,
-            invert=base.invert,
-            neutralize=base.neutralize,
-            winsor=base.winsor,
-            requires=base.requires,
-            derived_from=base.name,
-        )
-    )
+# 주의: '팩터 전체에 ttm 을 씌우는' derive_ttm 헬퍼는 의도적으로 없다.
+# ttm(mcap/netinc) 은 비율의 4분기 합이지 TTM 배수가 아니며 (올바른 정의는
+# mcap / ttm(netinc)), 일별 그리드가 섞이면 GridError 로 죽는다.
+# TTM 변형은 각 라이브러리 모듈에서 분자에만 ttm 을 걸어 명시적으로 정의한다.
 
 
 def derive_growth(

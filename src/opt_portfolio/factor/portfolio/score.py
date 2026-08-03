@@ -27,9 +27,9 @@ def rank_normalize(panel: pd.DataFrame) -> pd.DataFrame:
     n = panel.notna().sum(axis=1)
     # (r − 0.5)/n 꼴로 0/1 경계를 피한다
     adj = pct.sub(0.5 / n, axis=0).clip(1e-6, 1 - 1e-6)
-    return pd.DataFrame(
-        stats.norm.ppf(adj), index=panel.index, columns=panel.columns
-    ).where(panel.notna())
+    return pd.DataFrame(stats.norm.ppf(adj), index=panel.index, columns=panel.columns).where(
+        panel.notna()
+    )
 
 
 def composite_score(
@@ -54,13 +54,15 @@ def composite_score(
     w = weights or {name: 1.0 for name in panels}
     total_w = sum(abs(v) for v in w.values())
 
-    num, cov = None, None
+    num: pd.DataFrame | None = None
+    cov: pd.DataFrame | None = None
     for name, panel in panels.items():
         z = rank_normalize(panel) * w.get(name, 0.0)
         mask = panel.notna() * abs(w.get(name, 0.0))
         num = z.fillna(0.0) if num is None else num.add(z.fillna(0.0), fill_value=0.0)
         cov = mask if cov is None else cov.add(mask, fill_value=0.0)
 
+    assert num is not None and cov is not None  # panels 비어있음은 위에서 차단
     score = num / cov.where(cov > 0)
     return score.where(cov >= min_coverage * total_w)
 
@@ -82,9 +84,7 @@ def composite_by_category(
         if cat in category_weights:
             by_cat.setdefault(cat, {})[name] = panel
 
-    cat_scores = {
-        cat: composite_score(members) for cat, members in by_cat.items()
-    }
+    cat_scores = {cat: composite_score(members) for cat, members in by_cat.items()}
     return composite_score(cat_scores, dict(category_weights))
 
 

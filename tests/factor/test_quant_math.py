@@ -29,9 +29,7 @@ TICKERS = [f"T{i:02d}" for i in range(40)]
 
 def _random_close() -> pd.DataFrame:
     rets = RNG.normal(0.0003, 0.02, (len(DATES), len(TICKERS)))
-    return pd.DataFrame(
-        100 * np.exp(np.cumsum(rets, axis=0)), index=DATES, columns=TICKERS
-    )
+    return pd.DataFrame(100 * np.exp(np.cumsum(rets, axis=0)), index=DATES, columns=TICKERS)
 
 
 class TestIC:
@@ -44,9 +42,7 @@ class TestIC:
     def test_noise_factor_has_ic_near_zero(self) -> None:
         close = _random_close()
         fwd = forward_returns(close, horizon=5)
-        noise = pd.DataFrame(
-            RNG.normal(size=fwd.shape), index=fwd.index, columns=fwd.columns
-        )
+        noise = pd.DataFrame(RNG.normal(size=fwd.shape), index=fwd.index, columns=fwd.columns)
         summary = summarize_ic(rank_ic(noise, fwd), horizon=5)
         assert abs(summary.mean) < 0.05
         assert not summary.is_significant()
@@ -142,11 +138,9 @@ class TestWeights:
 
     def test_hrp_valid_weights(self) -> None:
         base = RNG.normal(0, 0.02, (300, 1))
-        block1 = base + RNG.normal(0, 0.005, (300, 3))   # 상관 블록
-        block2 = RNG.normal(0, 0.02, (300, 3))           # 독립 블록
-        rets = pd.DataFrame(
-            np.hstack([block1, block2]), columns=[f"A{i}" for i in range(6)]
-        )
+        block1 = base + RNG.normal(0, 0.005, (300, 3))  # 상관 블록
+        block2 = RNG.normal(0, 0.02, (300, 3))  # 독립 블록
+        rets = pd.DataFrame(np.hstack([block1, block2]), columns=[f"A{i}" for i in range(6)])
         w = hrp(rets)
         assert w.sum() == pytest.approx(1.0)
         assert (w >= 0).all()
@@ -172,9 +166,7 @@ class TestWeights:
         assert abs(w_low["A0"] - 0.2) < abs(w_high["A0"] - 0.2)
 
     def test_cap_and_normalize_waterfill(self) -> None:
-        w = cap_and_normalize(
-            pd.Series({"a": 0.9, "b": 0.05, "c": 0.05}), max_weight=0.4
-        )
+        w = cap_and_normalize(pd.Series({"a": 0.9, "b": 0.05, "c": 0.05}), max_weight=0.4)
         assert w["a"] == pytest.approx(0.4)
         assert w.sum() == pytest.approx(1.0)
         assert w["b"] == pytest.approx(0.3)
@@ -192,8 +184,6 @@ class TestScore:
         full = pd.DataFrame(RNG.normal(size=(3, 4)), index=idx, columns=list("abcd"))
         partial = full.copy()
         partial[["c", "d"]] = np.nan  # c,d 는 팩터 1개만 관측
-        score = composite_score(
-            {"f1": full, "f2": partial}, min_coverage=0.75
-        )
+        score = composite_score({"f1": full, "f2": partial}, min_coverage=0.75)
         assert score[["a", "b"]].notna().all().all()
         assert score[["c", "d"]].isna().all().all()

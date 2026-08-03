@@ -35,13 +35,9 @@ def ctx() -> PanelContext:
             {"AAA": [10.0, 11, 12, 13, 14, 15, 16, 17], "BBB": [-5.0] * 8},
             index=periods,
         ),
-        "assets": pd.DataFrame(
-            {"AAA": [1000.0] * 8, "BBB": [2000.0] * 8}, index=periods
-        ),
+        "assets": pd.DataFrame({"AAA": [1000.0] * 8, "BBB": [2000.0] * 8}, index=periods),
     }
-    availability = pd.DataFrame(
-        {t: datekeys for t in TICKERS}, index=periods
-    )
+    availability = pd.DataFrame({t: datekeys for t in TICKERS}, index=periods)
 
     calendar = pd.date_range("2020-01-01", "2022-06-30", freq="B")
     rng = np.random.default_rng(42)

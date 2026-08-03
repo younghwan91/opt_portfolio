@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import operator
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -36,13 +36,39 @@ _GROWTH_DENOM_FLOOR = 1e-9
 
 @dataclass(frozen=True)
 class Panel:
-    """평가 결과 — (date × ticker) 와이드 프레임 + 소속 그리드."""
+    """
+    평가 결과 — (date × ticker) 와이드 프레임 + 소속 그리드.
+
+    분기 그리드 패널은 `avail`(셀별 공시일)을 함께 실어 나른다.
+    소스마다 공시 지연이 다르므로 (SF1 실적공시 vs 13F +45일),
+    혼합 소스 표현식의 공시일은 BinOp 에서 element-wise max 로 전파된다 —
+    가장 늦게 공시된 피연산자가 전체 표현식의 가용 시점을 결정한다.
+
+    트랜스폼(TTM/Growth/Shift)은 avail 을 그대로 보존한다. 과거 분기를
+    참조하지만 datekey 는 종목 내에서 단조증가하므로 현재 행의 공시일이
+    곧 전체 윈도의 최댓값이다 (정정공시 재정렬은 어댑터에서 최초 공시
+    기준으로 dedup 하는 것을 전제로 한다 — store.py 참조).
+    """
 
     data: pd.DataFrame
     grid: Grid
+    avail: pd.DataFrame | None = None
 
     def with_data(self, data: pd.DataFrame) -> Panel:
-        return Panel(data=data, grid=self.grid)
+        return Panel(data=data, grid=self.grid, avail=self.avail)
+
+
+def _merge_avail(a: pd.DataFrame | None, b: pd.DataFrame | None) -> pd.DataFrame | None:
+    """두 공시일 프레임의 element-wise max. NaT 는 관측된 쪽으로 대체."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    a, b = a.align(b, join="outer")
+    av = a.to_numpy(dtype="datetime64[ns]")
+    bv = b.to_numpy(dtype="datetime64[ns]")
+    merged = np.where(np.isnat(av), bv, np.where(np.isnat(bv), av, np.maximum(av, bv)))
+    return pd.DataFrame(merged, index=a.index, columns=a.columns)
 
 
 class Expr(ABC):
@@ -205,8 +231,8 @@ class BinOp(Expr):
 
     def eval(self, ctx: PanelContext) -> Panel:
         lhs, rhs = _eval_pair(self.left, self.right, ctx)
-        aligned_l, aligned_r, grid = _align(lhs, rhs, ctx)
-        return Panel(self.fn(aligned_l, aligned_r), grid)
+        aligned_l, aligned_r, grid, avail = _align(lhs, rhs, ctx)
+        return Panel(self.fn(aligned_l, aligned_r), grid, avail)
 
     def describe(self) -> str:
         return f"({self.left.describe()} {self.symbol} {self.right.describe()})"
@@ -228,16 +254,14 @@ class UnaryOp(Expr):
 
 def _eval_pair(left: Expr, right: Expr, ctx: PanelContext) -> tuple[Panel, Panel]:
     """한쪽이 상수면 다른 쪽 모양에 맞춰 브로드캐스트한다."""
-    l_const = isinstance(left, Const)
-    r_const = isinstance(right, Const)
-    if l_const and r_const:
+    if isinstance(left, Const) and isinstance(right, Const):
         raise ValueError("두 피연산자가 모두 상수인 표현식은 팩터가 아닙니다")
-    if l_const:
+    if isinstance(left, Const):
         rhs = right.eval(ctx)
-        return Panel(_broadcast(left.value, rhs.data), rhs.grid), rhs
-    if r_const:
+        return Panel(_broadcast(left.value, rhs.data), rhs.grid, rhs.avail), rhs
+    if isinstance(right, Const):
         lhs = left.eval(ctx)
-        return lhs, Panel(_broadcast(right.value, lhs.data), lhs.grid)
+        return lhs, Panel(_broadcast(right.value, lhs.data), lhs.grid, lhs.avail)
     return left.eval(ctx), right.eval(ctx)
 
 
@@ -245,22 +269,26 @@ def _broadcast(value: float, like: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(value, index=like.index, columns=like.columns)
 
 
-def _align(lhs: Panel, rhs: Panel, ctx: PanelContext) -> tuple[pd.DataFrame, pd.DataFrame, Grid]:
+def _align(
+    lhs: Panel, rhs: Panel, ctx: PanelContext
+) -> tuple[pd.DataFrame, pd.DataFrame, Grid, pd.DataFrame | None]:
     """
     그리드가 다르면 분기 → 일별로 승격한다.
-    승격은 반드시 PIT 맵(공시일 기준)을 통과하므로 미래 정보가 새지 않는다.
+    승격은 해당 패널의 공시일(avail — 소스별로 다르고 BinOp 를 거치며
+    max 로 합성된 값)을 통과하므로 미래 정보가 새지 않는다.
     """
     if lhs.grid == rhs.grid:
         left, right = lhs.data.align(rhs.data, join="outer")
-        return left, right, lhs.grid
+        avail = _merge_avail(lhs.avail, rhs.avail) if lhs.grid == "quarterly" else None
+        return left, right, lhs.grid, avail
 
-    quarterly, daily = (lhs, rhs) if lhs.grid == "quarterly" else (rhs, lhs)
-    promoted = ctx.to_daily(quarterly.data)
+    quarterly = lhs if lhs.grid == "quarterly" else rhs
+    promoted = ctx.to_daily(quarterly.data, quarterly.avail)
     if lhs.grid == "quarterly":
         left, right = promoted.align(rhs.data, join="right")
-        return left, right, "daily"
+        return left, right, "daily", None
     left, right = lhs.data.align(promoted, join="left")
-    return left, right, "daily"
+    return left, right, "daily", None
 
 
 # ------------------------------------------------------------- 재무 트랜스폼 노드
@@ -488,7 +516,7 @@ def _cross_section_rows(data: pd.DataFrame, how: str, param: float) -> pd.DataFr
     raise ValueError(f"알 수 없는 횡단면 연산: {how}")
 
 
-def _group_masks(groups: pd.DataFrame):
+def _group_masks(groups: pd.DataFrame) -> Iterator[tuple[object, pd.DataFrame]]:
     """그룹 라벨 프레임 → (라벨, 불리언 마스크) 시퀀스."""
     labels = pd.unique(groups.to_numpy().ravel())
     for label in labels:
@@ -512,10 +540,13 @@ def _residualize(data: pd.DataFrame, design: dict[str, pd.DataFrame]) -> pd.Data
 
     for date in data.index:
         y = data.loc[date]
-        cols = [c.loc[date] if date in c.index else pd.Series(np.nan, index=data.columns)
-                for c in controls]
-        frame = pd.concat([y.rename("__y__"), *[c.rename(f"x{i}") for i, c in enumerate(cols)]],
-                          axis=1).dropna()
+        cols = [
+            c.loc[date] if date in c.index else pd.Series(np.nan, index=data.columns)
+            for c in controls
+        ]
+        frame = pd.concat(
+            [y.rename("__y__"), *[c.rename(f"x{i}") for i, c in enumerate(cols)]], axis=1
+        ).dropna()
         if len(frame) < len(controls) + 2:
             continue
         x = np.column_stack([np.ones(len(frame)), frame.iloc[:, 1:].to_numpy(dtype=float)])

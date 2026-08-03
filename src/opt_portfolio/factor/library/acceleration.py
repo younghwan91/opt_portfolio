@@ -26,9 +26,7 @@ _ACCEL_BASES = [
     (F.netinc - F.ncfo, "ACCRUAL", "발생액"),
 ]
 
-ACCEL_FACTORS = {
-    stem: derive_acceleration(expr, stem, label) for expr, stem, label in _ACCEL_BASES
-}
+ACCEL_FACTORS = {stem: derive_acceleration(expr, stem, label) for expr, stem, label in _ACCEL_BASES}
 
 
 # ----------------------------------------------- 이동평균 모멘텀 가속 (3개)

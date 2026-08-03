@@ -82,7 +82,7 @@ def walk_forward_folds(
 
 @dataclass
 class WalkForwardResult:
-    oos_returns: pd.Series                  # 이어붙인 OOS 수익률 — 공식 성과
+    oos_returns: pd.Series  # 이어붙인 OOS 수익률 — 공식 성과
     folds: list[Fold]
     params_per_fold: list[Params]
     searches: list[SearchResult] = field(repr=False, default_factory=list)
@@ -102,9 +102,7 @@ class WalkForwardResult:
             [s.objectives()[np.isfinite(s.objectives())] for s in self.searches]
         )
         sr_var = float(np.var(objectives)) if len(objectives) > 1 else None
-        return deflated_sharpe_ratio(
-            self.oos_returns, max(self.n_trials_total, 1), sr_var
-        )
+        return deflated_sharpe_ratio(self.oos_returns, max(self.n_trials_total, 1), sr_var)
 
     def sharpe(self, ann: int = 252) -> float:
         r = self.oos_returns.dropna()

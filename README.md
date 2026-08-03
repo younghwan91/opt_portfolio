@@ -714,3 +714,31 @@ print(f"Out-of-sample Sharpe: {result2.sharpe_ratio:.3f}")
 
 **🎯 포트폴리오를 최적화할 준비가 되셨나요?**  
 `python run.py`를 실행하고 시작하세요!
+
+---
+
+## 🇺🇸 US Factor Engine (v3)
+
+미국 전 종목 대상 팩터 투자 + 포트폴리오 최적화 서브시스템 (`src/opt_portfolio/factor/`).
+기존 VAA/OU 자산배분 모듈과 독립적으로 동작한다.
+
+- **팩터 136개** — 표현식 DSL 로 선언, 성장/가속 41개는 자동 파생 (`opt-factor factors`)
+- **Point-in-Time 보장** — 공시일(datekey) 기반 bitemporal 스토어, 소스별 공시 지연
+  (실적공시 vs 13F +45일) 을 표현식 트리로 전파해 look-ahead 를 구조적으로 차단
+- **비중 스킴 6종** — equal / inverse-vol / risk-parity / HRP / MVO / Black-Litterman
+  (Ledoit-Wolf 수축 공분산 공통)
+- **파라미터 최적화** — walk-forward(embargo) 전용, 그리드/랜덤/베이지안(GP-EI),
+  전 시도 기록 → Deflated Sharpe / PBO 정산
+
+```bash
+# 데이터 적재 (Sharadar 구독 후)
+export NASDAQ_DATA_LINK_API_KEY=...
+opt-factor ingest --store us.duckdb --provider sharadar --tables sf1,sep,daily,tickers
+
+# 팩터 검증 → 백테스트(참고) → walk-forward PO(공식 성과)
+opt-factor validate --store us.duckdb --config strategy.json
+opt-factor backtest --store us.duckdb --config strategy.json
+opt-factor optimize --store us.duckdb --config strategy.json --space space.json
+```
+
+설계 문서: `docs/factor-system/` (00 개요 · 01 팩터 정의 · 04 데이터 계약 · 05 수학 프로토콜)

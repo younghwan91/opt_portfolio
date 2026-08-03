@@ -45,9 +45,7 @@ def quantile_returns(
     for k in range(1, n_quantiles + 1):
         mask = q.eq(k)
         row_count = mask.sum(axis=1)
-        out[k] = fwd.where(mask).mean(axis=1).where(
-            row_count >= MIN_CROSS_SECTION // n_quantiles
-        )
+        out[k] = fwd.where(mask).mean(axis=1).where(row_count >= MIN_CROSS_SECTION // n_quantiles)
     return pd.DataFrame(out)
 
 
@@ -55,11 +53,11 @@ def quantile_returns(
 class QuantileReport:
     """분위수 분석 종합."""
 
-    mean_by_quantile: pd.Series   # 분위별 시간평균 수익률
-    spread: float                  # 최상위 − 최하위 (기간당)
-    spread_t: float                # 스프레드 t-통계
-    monotonicity: float            # 분위 순서 vs 평균수익 Spearman (−1..1)
-    top_turnover: float            # 최상위 분위 구성 회전율 (기간당)
+    mean_by_quantile: pd.Series  # 분위별 시간평균 수익률
+    spread: float  # 최상위 − 최하위 (기간당)
+    spread_t: float  # 스프레드 t-통계
+    monotonicity: float  # 분위 순서 vs 평균수익 Spearman (−1..1)
+    top_turnover: float  # 최상위 분위 구성 회전율 (기간당)
 
 
 def analyze_quantiles(
