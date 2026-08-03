@@ -365,6 +365,7 @@ src/opt_portfolio/
 ## 11. 문서 색인
 
 - `01-factor-spec.md` — 150개 팩터 전체 정의 · 계산식 · 소스 필드 매핑
-- `02-universe-spec.md` — 유니버스 필터 · WICS↔GICS 전체 매핑
-- `03-backtest-spec.md` — 트레이딩 설정 · 비용 모델 · 마켓타이밍
-- `04-data-contract.md` — 정규화 스키마 · PIT 규약 · 프로바이더 어댑터
+- `02-universe-spec.md` — 유니버스 필터 · WICS↔GICS 전체 매핑 *(예정)*
+- `03-backtest-spec.md` — 트레이딩 설정 · 비용 모델 · 마켓타이밍 *(§7 로 대체)*
+- `04-data-contract.md` — 정규화 스키마 · PIT 규약 · 프로바이더 어댑터 *(예정)*
+- `05-math-spec.md` — **검증·최적화·정산 프로토콜** (체결 규약, walk-forward PO, DSR/PBO)
