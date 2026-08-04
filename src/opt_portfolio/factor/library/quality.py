@@ -12,18 +12,23 @@ from __future__ import annotations
 
 from opt_portfolio.factor.dsl.expr import F
 from opt_portfolio.factor.dsl.registry import factor
+from opt_portfolio.factor.library._quarterly_ops import avg_balance
 
 _SF1 = ("SF1",)
 _SF1_SEP = ("SF1", "SEP")
 
 # ------------------------------------------------------------------ 수익성
 
-ROE = factor("ROE", F.netinc / F.equityavg, category="quality", label="ROE", requires=_SF1)
-ROA = factor("ROA", F.netinc / F.assetsavg, category="quality", label="ROA", requires=_SF1)
+ROE = factor(
+    "ROE", F.netinc / avg_balance(F.equity), category="quality", label="ROE", requires=_SF1
+)
+ROA = factor(
+    "ROA", F.netinc / avg_balance(F.assets), category="quality", label="ROA", requires=_SF1
+)
 # TTM 비율 = ttm(분자)/분모 — ttm(비율)은 '분기 비율의 합'이라 의미가 다르다
 ROE_TTM = factor(
     "ROE_TTM",
-    F.netinc.ttm() / F.equityavg,
+    F.netinc.ttm() / avg_balance(F.equity),
     category="quality",
     label="ROE (TTM)",
     requires=_SF1,
@@ -31,7 +36,7 @@ ROE_TTM = factor(
 )
 ROA_TTM = factor(
     "ROA_TTM",
-    F.netinc.ttm() / F.assetsavg,
+    F.netinc.ttm() / avg_balance(F.assets),
     category="quality",
     label="ROA (TTM)",
     requires=_SF1,
@@ -40,7 +45,7 @@ ROA_TTM = factor(
 
 ROIC = factor(
     "ROIC",
-    (F.ebit - F.taxexp) / F.invcapavg,
+    (F.ebit - F.taxexp) / avg_balance(F.invcap),
     category="quality",
     label="ROIC",
     requires=_SF1,
@@ -48,7 +53,7 @@ ROIC = factor(
 )
 GPIC = factor(
     "GPIC",
-    F.gp / F.invcapavg,
+    F.gp / avg_balance(F.invcap),
     category="quality",
     label="GPIC",
     requires=_SF1,
@@ -56,7 +61,7 @@ GPIC = factor(
 )
 RIC = factor(
     "RIC",
-    F.rnd / F.invcapavg,
+    F.rnd / avg_balance(F.invcap),
     category="quality",
     label="RIC",
     neutralize=("sector",),
@@ -131,14 +136,14 @@ IT_TURNOVER = factor(
 )
 ASSET_TURNOVER = factor(
     "ASSET_TURNOVER",
-    F.revenue / F.assetsavg,
+    F.revenue / avg_balance(F.assets),
     category="quality",
     label="Asset Turnover",
     requires=_SF1,
 )
 ASSET_TURNOVER_TTM = factor(
     "ASSET_TURNOVER_TTM",
-    F.revenue.ttm() / F.assetsavg,
+    F.revenue.ttm() / avg_balance(F.assets),
     category="quality",
     label="Asset Turnover (TTM)",
     requires=_SF1,
@@ -177,7 +182,7 @@ _ACCRUAL = F.netinc - F.ncfo
 
 AC_A = factor(
     "AC_A",
-    _ACCRUAL / F.assetsavg,
+    _ACCRUAL / avg_balance(F.assets),
     category="quality",
     label="AC/A",
     direction=-1,
@@ -185,7 +190,12 @@ AC_A = factor(
     notes="Sloan(1996) 발생액 이상현상",
 )
 AC_E = factor(
-    "AC_E", _ACCRUAL / F.equityavg, category="quality", label="AC/E", direction=-1, requires=_SF1
+    "AC_E",
+    _ACCRUAL / avg_balance(F.equity),
+    category="quality",
+    label="AC/E",
+    direction=-1,
+    requires=_SF1,
 )
 
 # ------------------------------------------------------------- 안정성 · 재무구조
@@ -236,7 +246,9 @@ CURRENT_RATIO = factor(
 # 이익변동성: 자산대비 이익률의 20분기 표준편차. 분기 그리드에서 계산하므로
 # rolling_std(일별 전용) 대신 표현식 조합이 아니라 전용 노드가 필요하다 →
 # 아래 EarningsVolatility 는 quarterly rolling 을 쓰는 별도 구현.
-from opt_portfolio.factor.library._quarterly_ops import quarterly_rolling_std  # noqa: E402
+from opt_portfolio.factor.library._quarterly_ops import (  # noqa: E402
+    quarterly_rolling_std,
+)
 
 EARNINGS_VOL = factor(
     "EARNINGS_VOL",

@@ -14,6 +14,7 @@ import pandas as pd
 
 from opt_portfolio.factor.dsl.context import PanelContext
 from opt_portfolio.factor.dsl.expr import Expr, F, Panel
+from opt_portfolio.factor.library._quarterly_ops import avg_balance
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,11 @@ def piotroski_f_expr() -> Expr:
     NaN 이면 전체가 NaN 이 된다. 이는 의도된 동작이다 —
     일부만 계산된 F-score 는 다른 종목의 F-score 와 비교 불가능하다.
     """
-    roa = F.netinc / F.assetsavg
-    leverage = F.debtnc / F.assetsavg
+    roa = F.netinc / avg_balance(F.assets)
+    leverage = F.debtnc / avg_balance(F.assets)
     current = F.assetsc / F.liabilitiesc
     gross_margin = F.gp / F.revenue
-    asset_turnover = F.revenue / F.assetsavg
+    asset_turnover = F.revenue / avg_balance(F.assets)
 
     return (
         # 수익성

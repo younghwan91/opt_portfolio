@@ -36,3 +36,15 @@ def quarterly_rolling_std(expr: Expr, window: int) -> Expr:
 
 def quarterly_rolling_mean(expr: Expr, window: int) -> Expr:
     return QuarterlyRolling(expr, window=window, how="mean")
+
+
+def avg_balance(expr: Expr) -> Expr:
+    """
+    기초·기말 평균 = (전분기 + 당분기) / 2.
+
+    벤더가 주는 `equityavg`/`assetsavg`/`invcapavg` 컬럼은 ARQ(as-reported
+    분기) 차원에서 전부 null 이다 — 실데이터 적재에서 확인(2026-08-05).
+    ROE·ROA·ROIC 의 분모는 정의상 기간 평균이므로 스톡 계열에서 직접
+    계산한다. 벤더가 채워주든 말든 결과가 같고, 계산식이 코드에 드러난다.
+    """
+    return (expr + expr.lag(1)) / 2.0
