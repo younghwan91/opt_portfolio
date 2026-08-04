@@ -233,6 +233,51 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    """백테스트 + IC 검증을 실행해 자기완결 HTML 티어시트를 만든다."""
+    from opt_portfolio.factor.report import render_tearsheet
+    from opt_portfolio.factor.research.ic import forward_returns, rank_ic, summarize_ic
+
+    pipeline, config = _pipeline(args)
+    result = pipeline.run(config, start=args.start, end=args.end)
+
+    dates = pipeline.signal_dates(config.signal_freq)
+    fwd = forward_returns(pipeline.close, horizon=21).reindex(dates)
+    ic_rows = []
+    for spec in config.resolved_factors():
+        ic = summarize_ic(rank_ic(pipeline.factor_panel(spec, dates), fwd), horizon=1)
+        ic_rows.append(
+            {
+                "팩터": spec.label,
+                "IC": f"{ic.mean:.3f}",
+                "IC-IR": f"{ic.ir:.2f}",
+                "t": f"{ic.t_stat:.2f}",
+            }
+        )
+    ic_table = pd.DataFrame(ic_rows).sort_values("t", ascending=False)
+
+    with _open_existing(args.store) as store:
+        coverage = store.coverage()
+
+    html = render_tearsheet(
+        result,
+        title=args.title,
+        config_summary={
+            "종목": str(config.backtest.n_stocks),
+            "리밸런싱": config.backtest.rebalance,
+            "비중": config.backtest.weighting,
+            "비용": f"{config.backtest.cost.linear_rate * 1e4:.0f}bp",
+            "팩터": str(len(config.factors)),
+        },
+        ic_table=ic_table,
+        coverage=coverage,
+    )
+    out = Path(args.out)
+    out.write_text(html)
+    print(f"티어시트 저장: {out}  ({out.stat().st_size / 1024:.0f} KB)")
+    return 0
+
+
 def cmd_optimize(args: argparse.Namespace) -> int:
     from opt_portfolio.factor.optimize.walkforward import run_walk_forward
 
@@ -307,6 +352,15 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--end", default=None)
         p.add_argument("--out", default=None)
         p.set_defaults(fn=fn)
+
+    p = sub.add_parser("report", help="HTML 티어시트 생성")
+    p.add_argument("--store", required=True)
+    p.add_argument("--config", required=True)
+    p.add_argument("--start", default=None)
+    p.add_argument("--end", default=None)
+    p.add_argument("--out", default="tearsheet.html")
+    p.add_argument("--title", default="Factor Strategy Tearsheet")
+    p.set_defaults(fn=cmd_report)
 
     p = sub.add_parser("optimize", help="walk-forward PO — 공식 성과 경로")
     p.add_argument("--store", required=True)

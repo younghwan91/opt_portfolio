@@ -400,3 +400,29 @@ class TestDirectAPI:
         )
         assert list(frame.columns) == ["ticker", "datekey"]
         assert frame.iloc[0, 0] == "AAPL"
+
+
+class TestReport:
+    def test_tearsheet_renders_gates_and_charts(self, synth_ctx, tmp_path) -> None:
+        import opt_portfolio.factor.library  # noqa: F401
+        from opt_portfolio.factor.pipeline import FactorPipeline
+        from opt_portfolio.factor.report import render_tearsheet
+
+        pipeline = FactorPipeline(synth_ctx)
+        strategy = StrategyConfig(
+            factors=("PER_TTM", "GP_A", "MOM_12_1"),
+            universe=UniverseConfig(min_adv_usd=0.0, exclude_distressed=False),
+            backtest=BacktestConfig(n_stocks=5, rebalance="ME"),
+            benchmark=BENCH,
+        )
+        result = pipeline.run(strategy, start="2019-06-01")
+        html = render_tearsheet(result, title="테스트 전략", config_summary={"종목": "5"})
+        # 판정 게이트가 최상단 규율로 존재하고, 미실행 상태가 명시된다
+        assert "판정 게이트" in html
+        assert "미실행" in html
+        assert "참고용" in html  # walk-forward 없으면 공식 배지 금지
+        assert "사용 금지" in html
+        # 차트 두 종 + 히트맵
+        assert html.count("<svg") >= 2
+        assert "월별 수익률" in html
+        (tmp_path / "t.html").write_text(html)  # 파일로 쓰기 가능한지
