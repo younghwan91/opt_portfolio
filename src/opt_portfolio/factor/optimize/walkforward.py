@@ -53,13 +53,27 @@ def walk_forward_folds(
     min_train_years: float = 5.0,
     test_months: int = 12,
     embargo_days: int = 21,
+    train_window_years: float | None = None,
 ) -> list[Fold]:
     """
-    확장 윈도 분할.
+    확장 윈도(기본) 또는 롤링 윈도 분할.
 
     Args:
         embargo_days: train 종료와 test 시작 사이 간격 (거래일 아님, 달력일).
             보유기간(리밸런싱 주기) 이상으로 잡을 것 — 월간이면 21일 이상.
+        train_window_years: None 이면 **확장 윈도** (학습 구간이 계속 자란다).
+            숫자를 주면 **롤링 윈도** — 각 폴드가 직전 N년만 학습한다.
+
+    확장 vs 롤링은 시장 비정상성(non-stationarity)에 대한 가정 차이다:
+    - 확장: 과거 관계가 지속된다고 보고 표본을 최대한 쓴다 (추정 분산 ↓)
+    - 롤링: 시장 구조가 변한다고 보고 최근만 쓴다 (편향 ↓, 분산 ↑)
+    어느 쪽이 맞는지는 **데이터가 답할 문제**다 — 둘 다 돌려 OOS 를 비교하면
+    된다. 단 그 비교 자체가 긴 히스토리를 요구한다 (5년이면 폴드가 2개뿐이라
+    두 방식을 구분할 검정력이 없다).
+
+    어느 쪽이든 **검증 구간은 항상 학습 구간 이후**다 — 오래된 데이터가
+    최근 예측에 섞여 들어가지 않는다. 긴 히스토리가 사는 것은 '옛날 신호'가
+    아니라 '독립적인 검증 횟수'다.
     """
     start, end = calendar[0], calendar[-1]
     first_test = start + pd.DateOffset(years=int(min_train_years))
@@ -70,7 +84,12 @@ def walk_forward_folds(
         train_end = test_start - pd.Timedelta(days=embargo_days)
         if train_end <= start or (test_end - test_start).days < 60:
             break
-        folds.append(Fold(start, train_end, test_start, test_end))
+        train_start = (
+            start
+            if train_window_years is None
+            else max(start, train_end - pd.DateOffset(years=int(train_window_years)))
+        )
+        folds.append(Fold(train_start, train_end, test_start, test_end))
         test_start = test_end
     if not folds:
         raise ValueError(
@@ -136,6 +155,7 @@ def run_walk_forward(
     min_train_years: float = 5.0,
     test_months: int = 12,
     embargo_days: int = 21,
+    train_window_years: float | None = None,
     seed: int = 0,
 ) -> WalkForwardResult:
     """
@@ -155,6 +175,7 @@ def run_walk_forward(
         min_train_years=min_train_years,
         test_months=test_months,
         embargo_days=embargo_days,
+        train_window_years=train_window_years,
     )
 
     oos_parts: list[pd.Series] = []

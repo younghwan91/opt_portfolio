@@ -204,3 +204,31 @@ class TestWalkForward:
         assert len(result.oos_returns) > 1000
         assert 0.0 <= result.deflated_sharpe() <= 1.0
         assert result.n_trials_total == 16 * len(result.folds)
+
+
+class TestTrainWindow:
+    """확장 윈도 vs 롤링 윈도 — 시장 비정상성 가정의 선택지."""
+
+    CAL = pd.date_range("2010-01-01", "2020-12-31", freq="B")
+
+    def test_expanding_window_grows(self) -> None:
+        folds = walk_forward_folds(self.CAL, min_train_years=3)
+        starts = {f.train_start for f in folds}
+        assert len(starts) == 1  # 학습 시작이 고정 = 구간이 계속 자란다
+        lengths = [(f.train_end - f.train_start).days for f in folds]
+        assert lengths == sorted(lengths)
+
+    def test_rolling_window_slides(self) -> None:
+        folds = walk_forward_folds(self.CAL, min_train_years=3, train_window_years=3)
+        assert len({f.train_start for f in folds}) == len(folds)  # 매번 이동
+        # 워밍업 폴드를 뺀 나머지는 학습 길이가 일정 (≈3년)
+        steady = [f for f in folds if f.train_start > self.CAL[0]]
+        lengths = [(f.train_end - f.train_start).days for f in steady]
+        assert max(lengths) - min(lengths) <= 2
+
+    def test_test_period_always_follows_training(self) -> None:
+        """어느 방식이든 검증은 학습 이후 — 옛 데이터가 예측에 새지 않는다."""
+        for window in (None, 3):
+            for f in walk_forward_folds(self.CAL, min_train_years=3, train_window_years=window):
+                assert f.train_end < f.test_start
+                assert f.train_start < f.train_end
