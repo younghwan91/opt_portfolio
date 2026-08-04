@@ -150,7 +150,7 @@ def _ingest_csv(store: PITStore, args: argparse.Namespace) -> int:
 def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
     from opt_portfolio.factor.data.sharadar import SharadarProvider
 
-    provider = SharadarProvider()
+    provider = SharadarProvider(api=args.api)
     if not provider.api_key:
         raise SystemExit("API 키가 없습니다. NASDAQ_DATA_LINK_API_KEY 환경변수를 설정하세요.")
     tables = args.tables.split(",") if args.tables else ["sf1", "sep", "tickers"]
@@ -279,6 +279,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--store", required=True)
     p.add_argument("--provider", choices=["sharadar", "csv"], required=True)
     p.add_argument("--tables", default=None, help="sf1,sep,daily,sf2,sf3,tickers")
+    p.add_argument(
+        "--api",
+        default="direct",
+        choices=["direct", "ndl"],
+        help="sharadar 직판(기본) 또는 Nasdaq Data Link 폴백",
+    )
     p.add_argument("--since", default=None)
     p.add_argument("--csv", default=None)
     p.add_argument(

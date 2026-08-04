@@ -1,15 +1,19 @@
 """
-Sharadar 어댑터 (Nasdaq Data Link datatables API + 벌크 CSV)
+Sharadar 어댑터 — 직판 API (api.sharadar.com) 1차, Nasdaq Data Link 폴백
 
-두 가지 수급 경로를 지원한다:
-- **API**: 증분 동기화 (`lastupdated >= since`). 일간 갱신용.
-- **CSV**: 구독 시 제공되는 벌크 다운로드. 초기 적재용 (수 GB).
+세 가지 수급 경로:
+- **direct**: sharadar.com 직판 REST.
+  `https://api.sharadar.com/v1.0/data/{table}?api_key=..&format=json&limit=..`
+  커서가 없으므로 날짜 오름차순 정렬 + `from=` 윈도잉으로 페이지네이션한다.
+  경계 날짜 행이 페이지 간 중복될 수 있으나 스토어의 키 기반 업서트가 걸러낸다.
+- **ndl**: Nasdaq Data Link datatables (커서 페이지네이션). 직판 장애 시 폴백.
+- **CSV**: 벌크 다운로드 파일. 초기 전체 적재용 (수 GB).
 
-엔드포인트·컬럼명은 Nasdaq Data Link 문서 기준이며, sharadar.com 직판의
-API 형태가 다르면 `_TABLE_URL` 과 컬럼 매핑만 고치면 된다 —
-정규화 이후는 전부 벤더 중립이다.
+⚠️ 직판 테이블 슬러그는 문서에서 `fundamentals` 만 확인됨 — 나머지는
+   추정이며 무료 티어(다우 30)로 구독 전 검증한다. 틀리면 _DIRECT_TABLES
+   상수 한 줄씩만 고치면 된다.
 
-환경변수: NASDAQ_DATA_LINK_API_KEY (또는 SHARADAR_API_KEY)
+환경변수: SHARADAR_API_KEY (직판) / NASDAQ_DATA_LINK_API_KEY (폴백)
 """
 
 from __future__ import annotations
@@ -32,7 +36,29 @@ from opt_portfolio.factor.data.schema import DEFAULT_DIMENSION, FILING_LAG_13F_D
 
 logger = logging.getLogger(__name__)
 
-_TABLE_URL = "https://data.nasdaq.com/api/v3/datatables/SHARADAR/{table}.json"
+_NDL_URL = "https://data.nasdaq.com/api/v3/datatables/SHARADAR/{table}.json"
+_DIRECT_URL = "https://api.sharadar.com/v1.0/data/{table}"
+
+#: NDL 테이블 코드 → 직판 슬러그. 'fundamentals' 만 공식 문서에서 확인됨,
+#: 나머지는 무료 티어로 검증 후 필요시 수정 (docs/factor-system/04 §4).
+_DIRECT_TABLES = {
+    "SF1": "fundamentals",
+    "SEP": "sep",
+    "DAILY": "daily",
+    "SF2": "sf2",
+    "SF3A": "sf3a",
+    "TICKERS": "tickers",
+}
+
+#: 직판 윈도잉 페이지네이션의 정렬/커서 기준 날짜 컬럼
+_DIRECT_PAGE_COL = {
+    "SF1": "datekey",
+    "SEP": "date",
+    "DAILY": "date",
+    "SF2": "filingdate",
+    "SF3A": "calendardate",
+    "TICKERS": None,  # 소형 테이블 — 단일 요청
+}
 
 #: 13F 집계(SF3A) 벤더 컬럼 → 표준 필드
 _SF3A_RENAME = {"shrunits": "inst_shares", "shrholders": "inst_holders"}
@@ -57,11 +83,19 @@ class SharadarProvider:
         api_key: str | None = None,
         get_json: Callable[[str, dict], dict] | None = None,
         page_size: int = 10_000,
+        api: str = "direct",
     ) -> None:
+        """
+        Args:
+            api: "direct" (sharadar.com, 기본) 또는 "ndl" (Nasdaq Data Link 폴백)
+        """
+        if api not in ("direct", "ndl"):
+            raise ValueError(f"api 는 'direct' 또는 'ndl' 이어야 합니다: {api!r}")
+        self.api = api
         self.api_key = (
             api_key
-            or os.environ.get("NASDAQ_DATA_LINK_API_KEY")
             or os.environ.get("SHARADAR_API_KEY")
+            or os.environ.get("NASDAQ_DATA_LINK_API_KEY")
             or ""
         )
         self._get_json = get_json or _default_get_json
@@ -155,6 +189,45 @@ class SharadarProvider:
 
     # ------------------------------------------------------------------ 내부
     def _paginate(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
+        if self.api == "direct":
+            yield from self._paginate_direct(table, params)
+        else:
+            yield from self._paginate_ndl(table, params)
+
+    def _paginate_direct(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
+        """
+        직판 API 윈도잉 페이지네이션.
+
+        커서가 없으므로 날짜 컬럼 오름차순 정렬 + limit 만큼 받고,
+        마지막 행의 날짜를 다음 요청의 `from` 으로 쓴다. 경계 날짜 행이
+        중복 수신될 수 있으나 스토어 업서트(키 기반)가 멱등하게 걸러낸다.
+        """
+        slug = _DIRECT_TABLES.get(table, table.lower())
+        url = _DIRECT_URL.format(table=slug)
+        date_col = _DIRECT_PAGE_COL.get(table)
+        window_from = params.pop("from", None)
+
+        while True:
+            query = {
+                **params,
+                "api_key": self.api_key,
+                "format": "json",
+                "limit": self.page_size,
+            }
+            if date_col:
+                query["sort"] = f"{date_col}.asc"
+                if window_from:
+                    query["from"] = window_from
+            frame = _parse_direct_payload(self._fetch(url, query))
+            if frame.empty:
+                return
+            yield frame
+            if date_col is None or len(frame) < self.page_size:
+                return
+            window_from = str(pd.to_datetime(frame[date_col]).max().date())
+
+    def _paginate_ndl(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
+        """Nasdaq Data Link datatables — 커서 페이지네이션 (폴백 경로)."""
         cursor: str | None = None
         while True:
             query = {
@@ -164,7 +237,9 @@ class SharadarProvider:
             }
             if cursor:
                 query["qopts.cursor_id"] = cursor
-            payload = self._fetch(_TABLE_URL.format(table=table), query)
+            payload = self._fetch(_NDL_URL.format(table=table), query)
+            if not isinstance(payload, dict):
+                raise ValueError("NDL 응답은 dict 여야 합니다 (datatable 래퍼)")
             dt = payload.get("datatable", {})
             columns = [c["name"] for c in dt.get("columns", [])]
             rows = dt.get("data", [])
@@ -180,19 +255,35 @@ class SharadarProvider:
         stop=stop_after_attempt(5),
         reraise=True,
     )
-    def _fetch(self, url: str, params: dict) -> dict:
-        payload: dict = self._get_json(url, params)
+    def _fetch(self, url: str, params: dict) -> dict | list:
+        payload: dict | list = self._get_json(url, params)
         return payload
 
 
-def _default_get_json(url: str, params: dict) -> dict:
+def _parse_direct_payload(payload: dict | list) -> pd.DataFrame:
+    """
+    직판 JSON 응답 → DataFrame.
+
+    문서에 응답 스키마가 명시돼 있지 않아 두 관례를 모두 받는다:
+    레코드 배열([{...}, ...]) 또는 {columns: [...], data: [[...]]}.
+    """
+    if isinstance(payload, list):
+        return pd.DataFrame(payload)
+    if "data" in payload:
+        columns = payload.get("columns")
+        names = [c["name"] if isinstance(c, dict) else c for c in columns] if columns else None
+        return pd.DataFrame(payload["data"], columns=names)
+    raise ValueError(f"해석할 수 없는 직판 응답 형식: {type(payload).__name__}")
+
+
+def _default_get_json(url: str, params: dict) -> dict | list:
     import requests
 
     resp = requests.get(url, params=params, timeout=60)
     if resp.status_code == 429 or resp.status_code >= 500:
         raise TransientAPIError(f"HTTP {resp.status_code}: {url}")
     resp.raise_for_status()
-    payload: dict = resp.json()
+    payload: dict | list = resp.json()
     return payload
 
 

@@ -155,7 +155,7 @@ class TestProviderAdapters:
             calls.append(params.get("qopts.cursor_id"))
             return pages[len(calls) - 1]
 
-        provider = SharadarProvider(api_key="test", get_json=fake_get)
+        provider = SharadarProvider(api_key="test", get_json=fake_get, api="ndl")
         chunks = list(provider.fundamentals())
         assert len(chunks) == 2
         assert calls == [None, "abc"]  # 커서 전달 확인
@@ -305,3 +305,58 @@ class TestCLI:
         bad.write_text(json.dumps({"factors": ["PER"], "univrese": {}}))
         with pytest.raises(SystemExit, match="없는 설정 키"):
             load_strategy(bad)
+
+
+class TestDirectAPI:
+    """sharadar.com 직판 REST — 윈도잉 페이지네이션과 응답 파싱."""
+
+    def test_windowed_pagination_advances_from_date(self) -> None:
+        # 1페이지: page_size 만큼 꽉 참 → 마지막 datekey 로 from 갱신
+        page1 = [
+            {
+                "ticker": "AAPL",
+                "calendardate": "2024-03-31",
+                "datekey": "2024-05-02",
+                "dimension": "ARQ",
+                "revenue": 90.0,
+            },
+            {
+                "ticker": "MSFT",
+                "calendardate": "2024-03-31",
+                "datekey": "2024-05-03",
+                "dimension": "ARQ",
+                "revenue": 61.0,
+            },
+        ]
+        page2 = [
+            {
+                "ticker": "NVDA",
+                "calendardate": "2024-04-30",
+                "datekey": "2024-05-25",
+                "dimension": "ARQ",
+                "revenue": 26.0,
+            },
+        ]
+        calls: list[dict] = []
+
+        def fake_get(url: str, params: dict) -> list:
+            calls.append(dict(params))
+            assert "api.sharadar.com/v1.0/data/fundamentals" in url
+            return page1 if len(calls) == 1 else page2
+
+        provider = SharadarProvider(api_key="test", get_json=fake_get, api="direct", page_size=2)
+        chunks = list(provider.fundamentals())
+        assert len(chunks) == 2
+        assert calls[0]["sort"] == "datekey.asc"
+        assert "from" not in calls[0]
+        assert calls[1]["from"] == "2024-05-03"  # 1페이지 마지막 datekey
+        assert len(chunks[1]) == 1  # page_size 미만 → 종료
+
+    def test_parses_columns_data_payload_shape(self) -> None:
+        from opt_portfolio.factor.data.sharadar import _parse_direct_payload
+
+        frame = _parse_direct_payload(
+            {"columns": ["ticker", "datekey"], "data": [["AAPL", "2024-05-02"]]}
+        )
+        assert list(frame.columns) == ["ticker", "datekey"]
+        assert frame.iloc[0, 0] == "AAPL"
