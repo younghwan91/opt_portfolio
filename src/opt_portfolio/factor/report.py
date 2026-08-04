@@ -90,6 +90,16 @@ td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--grid);
   font-variant-numeric: tabular-nums; }
 .footer { margin-top: 32px; color: var(--muted); font-size: 12px;
   border-top: 1px solid var(--grid); padding-top: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.chip { border: 1px solid var(--ring); border-radius: 99px; padding: 3px 10px;
+  font-size: 12.5px; background: var(--page); }
+.chip b { font-variant-numeric: tabular-nums; }
+.chip .w { color: var(--muted); margin-left: 5px;
+  font-variant-numeric: tabular-nums; }
+.funnel { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  color: var(--ink-2); font-size: 13px; margin: 0 0 12px; }
+.funnel b { font-size: 17px; color: var(--ink); font-weight: 650; }
+.funnel .arrow { color: var(--muted); }
 #tip { position: fixed; pointer-events: none; background: var(--surface);
   border: 1px solid var(--ring); border-radius: 6px; padding: 6px 9px;
   font-size: 12px; display: none; box-shadow: 0 2px 8px rgba(0,0,0,.12); z-index: 9; }
@@ -277,6 +287,84 @@ def _drawdown_svg(equity: pd.Series, width: int = 1040, height: int = 130) -> st
 </svg>"""
 
 
+def _hbar_path(x0: float, x1: float, y: float, h: float, r: float = 4.0) -> str:
+    """가로 막대 — 기준선 쪽은 각지고 데이터 끝만 라운드 (마크 규격)."""
+    r = min(r, max(x1 - x0, 0.0), h / 2)
+    if r <= 0:
+        return f"M {x0},{y} H {x1} V {y + h} H {x0} Z"
+    return (
+        f"M {x0},{y} H {x1 - r} A {r},{r} 0 0 1 {x1},{y + r} "
+        f"V {y + h - r} A {r},{r} 0 0 1 {x1 - r},{y + h} H {x0} Z"
+    )
+
+
+def _holding_freq_svg(holdings: pd.DataFrame, width: int = 1040) -> str:
+    """종목별 보유 기간 비중 — 전략이 실제로 무엇을 붙들고 있었는지."""
+    freq = (holdings != 0).mean()
+    freq = freq[freq > 0].sort_values(ascending=False)
+    if freq.empty:
+        return "<p class='sub'>보유 기록 없음</p>"
+
+    row_h, gap, pad_l, pad_r, pad_t = 15.0, 7.0, 52.0, 52.0, 4.0
+    height = pad_t + len(freq) * (row_h + gap)
+    x_max = width - pad_r
+
+    rows = []
+    for i, (ticker, share) in enumerate(freq.items()):
+        y = pad_t + i * (row_h + gap)
+        x1 = pad_l + (x_max - pad_l) * float(share)
+        tip = f"{ticker}<br><b>{share:.0%}</b> 기간 보유"
+        rows.append(
+            f'<g data-tip="{tip}">'
+            f'<text x="{pad_l - 8}" y="{y + row_h - 3:.1f}" text-anchor="end"'
+            f' fill="var(--ink-2)" font-size="12">{ticker}</text>'
+            f'<rect x="{pad_l}" y="{y:.1f}" width="{x_max - pad_l:.1f}"'
+            f' height="{row_h}" fill="var(--grid)" opacity="0.5"/>'
+            f'<path d="{_hbar_path(pad_l, x1, y, row_h)}" fill="var(--s1)"/>'
+            f'<text x="{x_max + 6}" y="{y + row_h - 3:.1f}" fill="var(--muted)"'
+            f' font-size="11.5">{share:.0%}</text></g>'
+        )
+    return (
+        f'<svg viewBox="0 0 {width} {height:.0f}" style="width:100%;height:auto;'
+        f'display:block">{"".join(rows)}</svg>'
+    )
+
+
+def _holdings_section(holdings: pd.DataFrame, n_target: int, universe_avg: float | None) -> str:
+    if holdings.empty:
+        return ""
+    latest = holdings.iloc[-1]
+    latest = latest[latest > 0].sort_values(ascending=False)
+    n_unique = int((holdings != 0).any().sum())
+
+    chips = "".join(
+        f'<span class="chip"><b>{t}</b><span class="w">{w:.1%}</span></span>'
+        for t, w in latest.items()
+    )
+    funnel = [f"<b>{holdings.shape[1]}</b> 후보"]
+    if universe_avg:
+        funnel.append('<span class="arrow">→</span>')
+        funnel.append(f"필터 통과 평균 <b>{universe_avg:.0f}</b>")
+    funnel += [
+        '<span class="arrow">→</span>',
+        f"매 리밸런싱 <b>{n_target}</b>종목 보유",
+        '<span class="arrow">·</span>',
+        f"전 기간 등장 <b>{n_unique}</b>종목",
+    ]
+    return f"""
+  <h2>포트폴리오 구성</h2>
+  <div class="card">
+    <p class="funnel">{" ".join(funnel)}</p>
+    <div style="font-size:12px;color:var(--ink-2)">최근 리밸런싱 보유
+      ({holdings.index[-1].date()})</div>
+    <div class="chips">{chips}</div>
+    <div style="font-size:12px;color:var(--ink-2);margin:18px 0 2px">
+      종목별 보유 기간 비중</div>
+    {_holding_freq_svg(holdings)}
+    <p class="sub">100% = 전 구간 보유. 낮을수록 팩터 신호에 따라 교체된 종목.</p>
+  </div>"""
+
+
 def _diverging_color(v: float, vmax: float) -> str:
     """월수익 → blue(+) / red(−), 회색 중립점. 팔레트 diverging 규약."""
     if not np.isfinite(v) or vmax <= 0:
@@ -345,6 +433,7 @@ def render_tearsheet(
     ic_table: pd.DataFrame | None = None,
     walk_forward: WalkForwardResult | None = None,
     coverage: pd.DataFrame | None = None,
+    universe_avg: float | None = None,
 ) -> str:
     """티어시트 HTML 문자열을 만든다 — 파일 저장은 호출 측."""
     stats = result.stats()
@@ -425,6 +514,15 @@ def render_tearsheet(
 
   <h2>성과 요약</h2>
   <div class="row tiles">{tiles_html}</div>
+
+  {
+        _holdings_section(
+            result.holdings,
+            int(stats.get("n_stocks_target", 0))
+            or int((result.holdings != 0).sum(axis=1).max() or 0),
+            universe_avg,
+        )
+    }
 
   <h2>누적 수익 (로그 스케일)</h2>
   <div class="card">{_equity_svg(result.equity)}</div>

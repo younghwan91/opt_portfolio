@@ -152,6 +152,11 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
 
     provider = SharadarProvider(api=args.api)
     tickers = args.tickers.split(",") if args.tickers else None
+    if tickers is None and args.api == "direct":
+        # 직판은 무필터 대량조회 시 '최신 N행'만 돌려주므로 유니버스를 먼저
+        # 확정하고 티커 청크로 받는다 — 조용한 절단을 구조적으로 차단.
+        tickers = provider.accessible_tickers()
+        print(f"접근 가능 유니버스: {len(tickers)}종목")
     if not provider.api_key:
         raise SystemExit("API 키가 없습니다. NASDAQ_DATA_LINK_API_KEY 환경변수를 설정하세요.")
     tables = args.tables.split(",") if args.tables else ["sf1", "sep", "tickers"]
@@ -173,7 +178,14 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
             for chunk in provider.insiders(since=args.since, tickers=tickers):
                 total += store.upsert_insiders(chunk)
         elif table == "tickers":
-            total += store.upsert_tickers(provider.tickers(tickers=tickers))
+            # 메타는 티커 목록을 명시해 청크로 받는다 — 무필터 조회는
+            # limit(10,000)에서 잘려 정작 필요한 종목이 빠질 수 있다.
+            wanted = tickers or store.known_tickers()
+            if wanted:
+                for i in range(0, len(wanted), 200):
+                    total += store.upsert_tickers(provider.tickers(tickers=wanted[i : i + 200]))
+            else:
+                total += store.upsert_tickers(provider.tickers())
         else:
             raise SystemExit(f"알 수 없는 테이블: {table}")
         print(f"{table}: {total}행 적재")
@@ -259,6 +271,9 @@ def cmd_report(args: argparse.Namespace) -> int:
     with _open_existing(args.store) as store:
         coverage = store.coverage()
 
+    universe_mask = pipeline.universe(config.universe)
+    universe_avg = float(universe_mask.sum(axis=1).mean())
+
     html = render_tearsheet(
         result,
         title=args.title,
@@ -271,6 +286,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         },
         ic_table=ic_table,
         coverage=coverage,
+        universe_avg=universe_avg,
     )
     out = Path(args.out)
     out.write_text(html)

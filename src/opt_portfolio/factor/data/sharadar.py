@@ -4,8 +4,11 @@ Sharadar 어댑터 — 직판 API (api.sharadar.com) 1차, Nasdaq Data Link 폴�
 세 가지 수급 경로:
 - **direct**: sharadar.com 직판 REST.
   `https://api.sharadar.com/v1.0/data/{table}?api_key=..&format=json&limit=..`
-  커서가 없으므로 날짜 오름차순 정렬 + `from=` 윈도잉으로 페이지네이션한다.
-  경계 날짜 행이 페이지 간 중복될 수 있으나 스토어의 키 기반 업서트가 걸러낸다.
+  커서가 없고, **결과가 한도를 넘으면 "가장 최근 N행"만 돌려준다**
+  (`sort` 는 돌려받은 페이지 안에서만 적용된다 — 선택 자체를 바꾸지 못한다).
+  따라서 전 기간을 받으려면 ① 티커를 청크로 쪼개 요청당 행수를 한도 아래로
+  낮추고 ② `to` 를 좁히며 최신→과거로 마칭한다. `from` 을 올리는 방식은
+  최신 구간을 맴돌 뿐이다. 경계 행 중복은 스토어 업서트가 멱등 처리한다.
 - **ndl**: Nasdaq Data Link datatables (커서 페이지네이션). 직판 장애 시 폴백.
 - **CSV**: 벌크 다운로드 파일. 초기 전체 적재용 (수 GB).
 
@@ -68,6 +71,10 @@ _DIRECT_RENAME: dict[str, dict[str, str]] = {
     "SF3A": {"date": "calendardate"},
 }
 
+#: 테이블별 티커 청크 크기 — 요청당 행수를 페이지 한도 아래로 유지한다.
+#: (SEP 는 티커당 5년 ≈ 1,260행이므로 5개씩; 분기 테이블은 티커당 ~20행)
+_DIRECT_CHUNK = {"SEP": 5, "DAILY": 20, "SF1": 100, "SF3A": 100, "SF2": 40, "TICKERS": 200}
+
 #: 13F 집계(SF3A) 벤더 컬럼 → 표준 필드
 _SF3A_RENAME = {"shrunits": "inst_shares", "shrholders": "inst_holders"}
 
@@ -77,6 +84,7 @@ class TransientAPIError(RuntimeError):
 
 
 def _ticker_param(tickers: list[str] | None) -> dict:
+    """NDL 경로 전용 — 직판은 청크 단위로 ticker 를 직접 세팅한다."""
     return {"ticker": ",".join(tickers)} if tickers else {}
 
 
@@ -117,10 +125,10 @@ class SharadarProvider:
     def fundamentals(
         self, since: str | None = None, tickers: list[str] | None = None
     ) -> Iterator[pd.DataFrame]:
-        params = {"dimension": DEFAULT_DIMENSION, **_ticker_param(tickers)}
+        params: dict = {"dimension": DEFAULT_DIMENSION}
         if since:
             params["lastupdated.gte"] = since
-        for chunk in self._paginate("SF1", params):
+        for chunk in self._paginate("SF1", params, tickers):
             frame = normalize_columns(chunk, "sharadar")
             validate_pit_frame(frame)
             yield frame
@@ -128,10 +136,10 @@ class SharadarProvider:
     def prices(
         self, since: str | None = None, tickers: list[str] | None = None
     ) -> Iterator[pd.DataFrame]:
-        params: dict = _ticker_param(tickers)
+        params: dict = {}
         if since:
             params["lastupdated.gte"] = since
-        for chunk in self._paginate("SEP", params):
+        for chunk in self._paginate("SEP", params, tickers):
             yield normalize_columns(_drop_raw_close(chunk), "sharadar")
 
     def daily_metrics(
@@ -144,10 +152,10 @@ class SharadarProvider:
         실응답으로 확인: AAPL 4,428,166.1 vs 4,508,288,143,800). 달러로
         환산하지 않으면 PER 등 배수가 10⁶배 틀어지므로 여기서 통일한다.
         """
-        params: dict = _ticker_param(tickers)
+        params: dict = {}
         if since:
             params["lastupdated.gte"] = since
-        for chunk in self._paginate("DAILY", params):
+        for chunk in self._paginate("DAILY", params, tickers):
             frame = normalize_columns(chunk, "sharadar")
             for col in ("mcap", "ev"):
                 if col in frame.columns:
@@ -163,10 +171,10 @@ class SharadarProvider:
         SF3 에는 공시일 컬럼이 없다 — 분기말 + 45일 (법정 기한) 로 보정한다.
         실제 공시일보다 보수적(늦은) 가정이므로 look-ahead 방향으로는 안전하다.
         """
-        params: dict = _ticker_param(tickers)
+        params: dict = {}
         if since:
             params["calendardate.gte"] = since
-        for chunk in self._paginate("SF3A", params):
+        for chunk in self._paginate("SF3A", params, tickers):
             frame = chunk.rename(columns=_SF3A_RENAME)
             frame["datekey"] = pd.to_datetime(frame["calendardate"]) + pd.Timedelta(
                 days=FILING_LAG_13F_DAYS
@@ -185,19 +193,19 @@ class SharadarProvider:
         '분기 합계'는 분기가 끝나기 전엔 확정값이 아니다 (신고가 더 올 수 있음).
         Form 4 마감이 거래 후 2영업일이므로 +3일이면 전량 수집이 보장된다.
         """
-        params: dict = _ticker_param(tickers)
+        params: dict = {}
         if since:
             params["filingdate.gte"] = since
-        for chunk in self._paginate("SF2", params):
+        for chunk in self._paginate("SF2", params, tickers):
             yield _aggregate_insiders(chunk)
 
     def tickers(self, tickers: list[str] | None = None) -> pd.DataFrame:
         # NDL 은 table=SF1 필터가 필요하지만, 직판은 이 필터에 빈 결과를
         # 반환한다 (table 컬럼 값 체계가 다름 — 실적재에서 확인)
-        params = _ticker_param(tickers)
+        params: dict = {}
         if self.api == "ndl":
             params["table"] = "SF1"
-        frames = list(self._paginate("TICKERS", params))
+        frames = list(self._paginate("TICKERS", params, tickers))
         if not frames:
             return pd.DataFrame()
         raw = pd.concat(frames, ignore_index=True)
@@ -205,6 +213,26 @@ class SharadarProvider:
         if "isdelisted" in out.columns and "is_delisted" not in out.columns:
             out = out.rename(columns={"isdelisted": "is_delisted"})
         return out
+
+    def accessible_tickers(self) -> list[str]:
+        """
+        이 API 키로 실제 재무 데이터가 조회되는 티커 목록.
+
+        구독 티어마다 유니버스가 다르므로(무료 = S&P500 현재 구성종목) 하드코딩
+        대신 최근 분기 재무를 조회해 알아낸다.
+        """
+        found: set[str] = set()
+        for quarter_back in range(4):
+            end = pd.Timestamp.today().normalize() - pd.DateOffset(months=3 * quarter_back)
+            params = {"dimension": DEFAULT_DIMENSION, "fields": "ticker,calendardate"}
+            params["from"] = str((end - pd.DateOffset(months=4)).date())
+            for chunk in self._march_back(
+                _DIRECT_URL.format(table=_DIRECT_TABLES["SF1"]), params, "date"
+            ):
+                found.update(chunk["ticker"].astype(str))
+            if found:
+                break
+        return sorted(found)
 
     # ------------------------------------------------------------------ CSV
     def load_csv(self, path: str | Path, kind: str) -> Iterator[pd.DataFrame]:
@@ -225,26 +253,47 @@ class SharadarProvider:
             yield from readers[kind](chunk)
 
     # ------------------------------------------------------------------ 내부
-    def _paginate(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
+    def _paginate(
+        self, table: str, params: dict, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
         if self.api == "direct":
-            yield from self._paginate_direct(table, params)
+            yield from self._paginate_direct(table, params, tickers)
         else:
-            yield from self._paginate_ndl(table, params)
+            yield from self._paginate_ndl(table, {**params, **_ticker_param(tickers)})
 
-    def _paginate_direct(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
-        """
-        직판 API 윈도잉 페이지네이션.
-
-        커서가 없으므로 날짜 컬럼 오름차순 정렬 + limit 만큼 받고,
-        마지막 행의 날짜를 다음 요청의 `from` 으로 쓴다. 경계 날짜 행이
-        중복 수신될 수 있으나 스토어 업서트(키 기반)가 멱등하게 걸러낸다.
-        """
+    def _paginate_direct(
+        self, table: str, params: dict, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
+        """티커 청크 × 날짜 역방향 마칭 — 전 기간 수집을 보장한다."""
         slug = _DIRECT_TABLES.get(table, table.lower())
         url = _DIRECT_URL.format(table=slug)
         date_col = _DIRECT_PAGE_COL.get(table)
-        window_from = params.pop("from", None)
+        rename = _DIRECT_RENAME.get(table, {})
 
-        while True:
+        if tickers:
+            size = _DIRECT_CHUNK.get(table, 50)
+            groups: list[list[str] | None] = [
+                tickers[i : i + size] for i in range(0, len(tickers), size)
+            ]
+        else:
+            groups = [None]
+
+        for group in groups:
+            query = dict(params)
+            if group:
+                query["ticker"] = ",".join(group)
+            for frame in self._march_back(url, query, date_col):
+                yield frame.rename(columns=rename)
+
+    def _march_back(self, url: str, params: dict, date_col: str | None) -> Iterator[pd.DataFrame]:
+        """
+        최신 → 과거 방향 페이지네이션.
+
+        한 페이지가 한도만큼 차면 그 페이지의 가장 이른 날짜 직전으로 `to` 를
+        내려 다음 페이지를 받는다. 한도 미만이면 그 청크는 전부 받은 것이다.
+        """
+        to_date: str | None = None
+        for _ in range(500):  # 무한루프 방지 — 청크당 500페이지면 충분
             query = {
                 **params,
                 "api_key": self.api_key,
@@ -253,17 +302,17 @@ class SharadarProvider:
             }
             if date_col:
                 query["sort"] = f"{date_col}.asc"
-                if window_from:
-                    query["from"] = window_from
+                if to_date:
+                    query["to"] = to_date
             frame = _parse_direct_payload(self._fetch(url, query))
             if frame.empty:
                 return
-            # 커서는 리네임 전 벤더 컬럼('date')으로 계산한다
-            next_from = str(pd.to_datetime(frame[date_col]).max().date()) if date_col else None
-            yield frame.rename(columns=_DIRECT_RENAME.get(table, {}))
+            yield frame
             if date_col is None or len(frame) < self.page_size:
                 return
-            window_from = next_from
+            oldest = pd.to_datetime(frame[date_col]).min()
+            to_date = str((oldest - pd.Timedelta(days=1)).date())
+        logger.warning("페이지 상한 도달 — 데이터가 잘렸을 수 있습니다: %s", params)
 
     def _paginate_ndl(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
         """Nasdaq Data Link datatables — 커서 페이지네이션 (폴백 경로)."""

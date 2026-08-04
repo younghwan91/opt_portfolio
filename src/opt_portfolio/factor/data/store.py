@@ -367,6 +367,13 @@ class PITStore:
         return (f"WHERE {' AND '.join(clauses)}" if clauses else ""), params
 
     # ------------------------------------------------------------------ 상태
+    def known_tickers(self) -> list[str]:
+        """가격 또는 재무 데이터가 실제로 적재된 티커 — 메타 수집 대상."""
+        rows = self.conn.execute(
+            "SELECT ticker FROM prices UNION SELECT ticker FROM fundamentals ORDER BY ticker"
+        ).fetchall()
+        return [r[0] for r in rows]
+
     def coverage(self) -> pd.DataFrame:
         """테이블별 행수·기간 — CLI status 와 수동 점검용."""
         rows = []

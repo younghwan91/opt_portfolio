@@ -339,11 +339,14 @@ class TestCLI:
 
 
 class TestDirectAPI:
-    """sharadar.com 직판 REST — 윈도잉 페이지네이션과 응답 파싱."""
+    """sharadar.com 직판 REST — 티커 청크 + 날짜 역방향 마칭."""
 
-    def test_windowed_pagination_advances_from_date(self) -> None:
-        # 1페이지: page_size 만큼 꽉 참 → 마지막 datekey 로 from 갱신
-        # 실응답 형태: {"count", "data": [records]}, 날짜 컬럼명은 'date', 숫자는 문자열
+    def test_marches_backward_with_to_not_forward_with_from(self) -> None:
+        """
+        직판은 한도 초과 시 '최신 N행'만 준다. 따라서 과거로 내려가려면
+        to 를 좁혀야 하고, from 을 올리면 최신 구간을 맴돈다 — 실적재에서
+        SEP 이 최근 1개월로 잘렸던 회귀를 잡는 테스트.
+        """
         page1 = {
             "count": 2,
             "data": [
@@ -355,11 +358,11 @@ class TestDirectAPI:
                     "revenue": "90.0",
                 },
                 {
-                    "ticker": "MSFT",
-                    "calendardate": "2024-03-31",
-                    "date": "2024-05-03",
+                    "ticker": "AAPL",
+                    "calendardate": "2024-06-30",
+                    "date": "2024-08-01",
                     "dimension": "ARQ",
-                    "revenue": "61.0",
+                    "revenue": "85.0",
                 },
             ],
         }
@@ -367,11 +370,11 @@ class TestDirectAPI:
             "count": 1,
             "data": [
                 {
-                    "ticker": "NVDA",
-                    "calendardate": "2024-04-30",
-                    "date": "2024-05-25",
+                    "ticker": "AAPL",
+                    "calendardate": "2023-12-31",
+                    "date": "2024-02-01",
                     "dimension": "ARQ",
-                    "revenue": "26.0",
+                    "revenue": "119.0",
                 },
             ],
         }
@@ -383,14 +386,33 @@ class TestDirectAPI:
             return page1 if len(calls) == 1 else page2
 
         provider = SharadarProvider(api_key="test", get_json=fake_get, api="direct", page_size=2)
-        chunks = list(provider.fundamentals())
+        chunks = list(provider.fundamentals(tickers=["AAPL"]))
         assert len(chunks) == 2
-        assert calls[0]["sort"] == "date.asc"
-        assert "from" not in calls[0]
-        assert calls[1]["from"] == "2024-05-03"  # 1페이지 마지막 date
-        assert len(chunks[1]) == 1  # page_size 미만 → 종료
-        # 'date' → 'datekey' 복원 확인 (PIT 계약 컬럼)
-        assert "datekey" in chunks[0].columns
+        assert calls[0]["ticker"] == "AAPL"
+        assert "to" not in calls[0]  # 첫 페이지는 최신부터
+        # 1페이지 최소 date 2024-05-02 → 하루 전으로 to 를 내린다
+        assert calls[1]["to"] == "2024-05-01"
+        assert "from" not in calls[1]
+        assert "datekey" in chunks[0].columns  # 'date' → 'datekey' 복원
+
+    def test_chunks_tickers_to_stay_under_page_limit(self) -> None:
+        """SEP 은 티커당 행수가 커서 소규모 청크로 쪼개 요청해야 한다."""
+        calls: list[dict] = []
+
+        def fake_get(url: str, params: dict) -> dict:
+            calls.append(dict(params))
+            return {
+                "count": 1,
+                "data": [{"ticker": "X", "date": "2024-01-02", "closeadj": 1.0, "volume": 1.0}],
+            }
+
+        provider = SharadarProvider(api_key="t", get_json=fake_get, api="direct")
+        names = [f"T{i:02d}" for i in range(12)]
+        list(provider.prices(tickers=names))
+        # SEP 청크 크기 5 → 12종목이면 3회 요청, 각 요청의 티커는 5개 이하
+        assert len(calls) == 3
+        for call in calls:
+            assert len(call["ticker"].split(",")) <= 5
 
     def test_parses_columns_data_payload_shape(self) -> None:
         from opt_portfolio.factor.data.sharadar import _parse_direct_payload
