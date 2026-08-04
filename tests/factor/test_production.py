@@ -341,28 +341,28 @@ class TestCLI:
 class TestDirectAPI:
     """sharadar.com 직판 REST — 티커 청크 + 날짜 역방향 마칭."""
 
-    def test_marches_backward_with_to_not_forward_with_from(self) -> None:
+    def test_marches_forward_with_from_not_backward_with_to(self) -> None:
         """
-        직판은 한도 초과 시 '최신 N행'만 준다. 따라서 과거로 내려가려면
-        to 를 좁혀야 하고, from 을 올리면 최신 구간을 맴돈다 — 실적재에서
-        SEP 이 최근 1개월로 잘렸던 회귀를 잡는 테스트.
+        ticker 필터가 있으면 sort=date.asc 가 선택까지 지배해 가장 오래된
+        구간이 먼저 온다. 따라서 from 을 올려 전진해야 한다 — to 를 내리면
+        첫 페이지에서 즉시 끝난다 (DAILY 가 5년 중 2년만 들어왔던 회귀).
         """
         page1 = {
             "count": 2,
             "data": [
                 {
                     "ticker": "AAPL",
+                    "calendardate": "2023-12-31",
+                    "date": "2024-02-01",
+                    "dimension": "ARQ",
+                    "revenue": "119.0",
+                },
+                {
+                    "ticker": "AAPL",
                     "calendardate": "2024-03-31",
                     "date": "2024-05-02",
                     "dimension": "ARQ",
                     "revenue": "90.0",
-                },
-                {
-                    "ticker": "AAPL",
-                    "calendardate": "2024-06-30",
-                    "date": "2024-08-01",
-                    "dimension": "ARQ",
-                    "revenue": "85.0",
                 },
             ],
         }
@@ -371,10 +371,10 @@ class TestDirectAPI:
             "data": [
                 {
                     "ticker": "AAPL",
-                    "calendardate": "2023-12-31",
-                    "date": "2024-02-01",
+                    "calendardate": "2024-06-30",
+                    "date": "2024-08-01",
                     "dimension": "ARQ",
-                    "revenue": "119.0",
+                    "revenue": "85.0",
                 },
             ],
         }
@@ -388,12 +388,30 @@ class TestDirectAPI:
         provider = SharadarProvider(api_key="test", get_json=fake_get, api="direct", page_size=2)
         chunks = list(provider.fundamentals(tickers=["AAPL"]))
         assert len(chunks) == 2
-        assert calls[0]["ticker"] == "AAPL"
-        assert "to" not in calls[0]  # 첫 페이지는 최신부터
-        # 1페이지 최소 date 2024-05-02 → 하루 전으로 to 를 내린다
-        assert calls[1]["to"] == "2024-05-01"
-        assert "from" not in calls[1]
-        assert "datekey" in chunks[0].columns  # 'date' → 'datekey' 복원
+        assert calls[0]["sort"] == "date.asc"
+        assert "from" not in calls[0]  # 첫 페이지는 가장 과거부터
+        assert "to" not in calls[1]  # to 로 내려가면 안 된다
+        assert calls[1]["from"] == "2024-05-02"  # 1페이지 최신 date 에서 이어받기
+        assert "datekey" in chunks[0].columns
+
+    def test_stops_when_single_date_exceeds_page(self) -> None:
+        """한 날짜가 페이지를 꽉 채우면 전진 불가 — 무한루프 대신 경고 후 종료."""
+        same_day = {
+            "count": 2,
+            "data": [
+                {"ticker": "A", "date": "2024-01-02", "closeadj": 1.0},
+                {"ticker": "B", "date": "2024-01-02", "closeadj": 2.0},
+            ],
+        }
+        calls = []
+
+        def fake_get(url: str, params: dict) -> dict:
+            calls.append(params)
+            return same_day
+
+        provider = SharadarProvider(api_key="t", get_json=fake_get, api="direct", page_size=2)
+        list(provider.prices(tickers=["A", "B"]))
+        assert len(calls) <= 3  # 전진 불가 감지 후 중단
 
     def test_chunks_tickers_to_stay_under_page_limit(self) -> None:
         """SEP 은 티커당 행수가 커서 소규모 청크로 쪼개 요청해야 한다."""

@@ -4,11 +4,12 @@ Sharadar 어댑터 — 직판 API (api.sharadar.com) 1차, Nasdaq Data Link 폴�
 세 가지 수급 경로:
 - **direct**: sharadar.com 직판 REST.
   `https://api.sharadar.com/v1.0/data/{table}?api_key=..&format=json&limit=..`
-  커서가 없고, **결과가 한도를 넘으면 "가장 최근 N행"만 돌려준다**
-  (`sort` 는 돌려받은 페이지 안에서만 적용된다 — 선택 자체를 바꾸지 못한다).
-  따라서 전 기간을 받으려면 ① 티커를 청크로 쪼개 요청당 행수를 한도 아래로
-  낮추고 ② `to` 를 좁히며 최신→과거로 마칭한다. `from` 을 올리는 방식은
-  최신 구간을 맴돌 뿐이다. 경계 행 중복은 스토어 업서트가 멱등 처리한다.
+  커서가 없고 결과가 한도를 넘으면 일부만 돌려준다. **어느 쪽 끝을 주는지가
+  ticker 필터 유무로 갈린다**: 필터가 있으면 `sort=date.asc` 가 선택까지
+  지배해 *가장 오래된* N행을, 필터가 없으면 정렬과 무관하게 *가장 최근* N행을
+  돌려준다 (둘 다 실측 확인).
+  → 항상 티커 청크로 요청하고(필터 있음 상태를 강제), `from` 을 올리며
+  과거→최신으로 마칭한다. 경계 날짜 행 중복은 스토어 업서트가 멱등 처리한다.
 - **ndl**: Nasdaq Data Link datatables (커서 페이지네이션). 직판 장애 시 폴백.
 - **CSV**: 벌크 다운로드 파일. 초기 전체 적재용 (수 GB).
 
@@ -73,7 +74,7 @@ _DIRECT_RENAME: dict[str, dict[str, str]] = {
 
 #: 테이블별 티커 청크 크기 — 요청당 행수를 페이지 한도 아래로 유지한다.
 #: (SEP 는 티커당 5년 ≈ 1,260행이므로 5개씩; 분기 테이블은 티커당 ~20행)
-_DIRECT_CHUNK = {"SEP": 5, "DAILY": 20, "SF1": 100, "SF3A": 100, "SF2": 40, "TICKERS": 200}
+_DIRECT_CHUNK = {"SEP": 5, "DAILY": 5, "SF1": 100, "SF3A": 100, "SF2": 40, "TICKERS": 200}
 
 #: 13F 집계(SF3A) 벤더 컬럼 → 표준 필드
 _SF3A_RENAME = {"shrunits": "inst_shares", "shrholders": "inst_holders"}
@@ -226,7 +227,7 @@ class SharadarProvider:
             end = pd.Timestamp.today().normalize() - pd.DateOffset(months=3 * quarter_back)
             params = {"dimension": DEFAULT_DIMENSION, "fields": "ticker,calendardate"}
             params["from"] = str((end - pd.DateOffset(months=4)).date())
-            for chunk in self._march_back(
+            for chunk in self._march_forward(
                 _DIRECT_URL.format(table=_DIRECT_TABLES["SF1"]), params, "date"
             ):
                 found.update(chunk["ticker"].astype(str))
@@ -282,18 +283,23 @@ class SharadarProvider:
             query = dict(params)
             if group:
                 query["ticker"] = ",".join(group)
-            for frame in self._march_back(url, query, date_col):
+            for frame in self._march_forward(url, query, date_col):
                 yield frame.rename(columns=rename)
 
-    def _march_back(self, url: str, params: dict, date_col: str | None) -> Iterator[pd.DataFrame]:
+    def _march_forward(
+        self, url: str, params: dict, date_col: str | None
+    ) -> Iterator[pd.DataFrame]:
         """
-        최신 → 과거 방향 페이지네이션.
+        과거 → 최신 방향 페이지네이션.
 
-        한 페이지가 한도만큼 차면 그 페이지의 가장 이른 날짜 직전으로 `to` 를
-        내려 다음 페이지를 받는다. 한도 미만이면 그 청크는 전부 받은 것이다.
+        ticker 필터가 걸린 요청에서 `sort=date.asc` 는 선택까지 지배하므로
+        첫 페이지가 가장 오래된 구간이다. 페이지가 한도만큼 차면 그 페이지의
+        마지막 날짜부터 다음 페이지를 이어받는다 (경계 날짜가 페이지 중간에서
+        잘릴 수 있어 +1일 하지 않고 같은 날짜부터 다시 받는다 — 중복은
+        스토어가 멱등 처리).
         """
-        to_date: str | None = None
-        for _ in range(500):  # 무한루프 방지 — 청크당 500페이지면 충분
+        from_date: str | None = params.pop("from", None)
+        for _ in range(500):  # 무한루프 방지
             query = {
                 **params,
                 "api_key": self.api_key,
@@ -302,16 +308,24 @@ class SharadarProvider:
             }
             if date_col:
                 query["sort"] = f"{date_col}.asc"
-                if to_date:
-                    query["to"] = to_date
+                if from_date:
+                    query["from"] = from_date
             frame = _parse_direct_payload(self._fetch(url, query))
             if frame.empty:
                 return
             yield frame
             if date_col is None or len(frame) < self.page_size:
                 return
-            oldest = pd.to_datetime(frame[date_col]).min()
-            to_date = str((oldest - pd.Timedelta(days=1)).date())
+            newest = str(pd.to_datetime(frame[date_col]).max().date())
+            if newest == from_date:
+                # 한 날짜의 행수가 페이지 한도를 넘어 전진이 불가능하다
+                logger.warning(
+                    "페이지 전진 불가 (%s 하루 행수 > 한도) — 청크를 줄이세요: %s",
+                    newest,
+                    params.get("ticker", "<no ticker>"),
+                )
+                return
+            from_date = newest
         logger.warning("페이지 상한 도달 — 데이터가 잘렸을 수 있습니다: %s", params)
 
     def _paginate_ndl(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
