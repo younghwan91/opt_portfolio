@@ -66,6 +66,7 @@ class TestStore:
         cov = synth_store.coverage().set_index("table")
         assert cov.loc["fundamentals", "rows"] > 0
         assert cov.loc["prices", "tickers"] == len(NORMAL) + 6  # 특수 5 + SPY
+        assert cov.loc["institutions", "rows"] > 0
 
     def test_context_is_point_in_time(self, synth_ctx) -> None:
         """분기값은 datekey(+45일) 전에 일별 그리드에 나타나면 안 된다."""
@@ -106,9 +107,39 @@ class TestStore:
 
 class TestProviderAdapters:
     def test_pit_contract_rejects_impossible_dates(self) -> None:
-        bad = pd.DataFrame([{"ticker": "A", "calendardate": "2024-06-30", "datekey": "2024-05-01"}])
+        # reportperiod 가 있으면 그것으로 엄격 검증
+        bad = pd.DataFrame(
+            [
+                {
+                    "ticker": "A",
+                    "calendardate": "2024-06-30",
+                    "reportperiod": "2024-06-30",
+                    "datekey": "2024-05-01",
+                }
+            ]
+        )
         with pytest.raises(ValueError, match="PIT 계약 위반"):
             validate_pit_frame(bad)
+        # reportperiod 없으면 92일(달력 스냅 허용치) 초과 조기만 거부
+        bad2 = pd.DataFrame(
+            [{"ticker": "A", "calendardate": "2024-06-30", "datekey": "2024-01-01"}]
+        )
+        with pytest.raises(ValueError, match="PIT 계약 위반"):
+            validate_pit_frame(bad2)
+
+    def test_pit_contract_allows_nonstandard_fiscal_year(self) -> None:
+        """NKE(5월 결산): datekey 가 calendardate 직전이어도 정상 (실데이터 케이스)."""
+        nke = pd.DataFrame(
+            [
+                {
+                    "ticker": "NKE",
+                    "calendardate": "2025-12-31",
+                    "reportperiod": "2025-11-30",
+                    "datekey": "2025-12-30",
+                }
+            ]
+        )
+        validate_pit_frame(nke)  # 예외 없어야 함
 
     def test_sharadar_pagination_and_normalization(self) -> None:
         pages = [
@@ -312,34 +343,41 @@ class TestDirectAPI:
 
     def test_windowed_pagination_advances_from_date(self) -> None:
         # 1페이지: page_size 만큼 꽉 참 → 마지막 datekey 로 from 갱신
-        page1 = [
-            {
-                "ticker": "AAPL",
-                "calendardate": "2024-03-31",
-                "datekey": "2024-05-02",
-                "dimension": "ARQ",
-                "revenue": 90.0,
-            },
-            {
-                "ticker": "MSFT",
-                "calendardate": "2024-03-31",
-                "datekey": "2024-05-03",
-                "dimension": "ARQ",
-                "revenue": 61.0,
-            },
-        ]
-        page2 = [
-            {
-                "ticker": "NVDA",
-                "calendardate": "2024-04-30",
-                "datekey": "2024-05-25",
-                "dimension": "ARQ",
-                "revenue": 26.0,
-            },
-        ]
+        # 실응답 형태: {"count", "data": [records]}, 날짜 컬럼명은 'date', 숫자는 문자열
+        page1 = {
+            "count": 2,
+            "data": [
+                {
+                    "ticker": "AAPL",
+                    "calendardate": "2024-03-31",
+                    "date": "2024-05-02",
+                    "dimension": "ARQ",
+                    "revenue": "90.0",
+                },
+                {
+                    "ticker": "MSFT",
+                    "calendardate": "2024-03-31",
+                    "date": "2024-05-03",
+                    "dimension": "ARQ",
+                    "revenue": "61.0",
+                },
+            ],
+        }
+        page2 = {
+            "count": 1,
+            "data": [
+                {
+                    "ticker": "NVDA",
+                    "calendardate": "2024-04-30",
+                    "date": "2024-05-25",
+                    "dimension": "ARQ",
+                    "revenue": "26.0",
+                },
+            ],
+        }
         calls: list[dict] = []
 
-        def fake_get(url: str, params: dict) -> list:
+        def fake_get(url: str, params: dict) -> dict:
             calls.append(dict(params))
             assert "api.sharadar.com/v1.0/data/fundamentals" in url
             return page1 if len(calls) == 1 else page2
@@ -347,10 +385,12 @@ class TestDirectAPI:
         provider = SharadarProvider(api_key="test", get_json=fake_get, api="direct", page_size=2)
         chunks = list(provider.fundamentals())
         assert len(chunks) == 2
-        assert calls[0]["sort"] == "datekey.asc"
+        assert calls[0]["sort"] == "date.asc"
         assert "from" not in calls[0]
-        assert calls[1]["from"] == "2024-05-03"  # 1페이지 마지막 datekey
+        assert calls[1]["from"] == "2024-05-03"  # 1페이지 마지막 date
         assert len(chunks[1]) == 1  # page_size 미만 → 종료
+        # 'date' → 'datekey' 복원 확인 (PIT 계약 컬럼)
+        assert "datekey" in chunks[0].columns
 
     def test_parses_columns_data_payload_shape(self) -> None:
         from opt_portfolio.factor.data.sharadar import _parse_direct_payload

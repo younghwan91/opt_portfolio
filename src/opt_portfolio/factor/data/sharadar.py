@@ -9,9 +9,9 @@ Sharadar 어댑터 — 직판 API (api.sharadar.com) 1차, Nasdaq Data Link 폴�
 - **ndl**: Nasdaq Data Link datatables (커서 페이지네이션). 직판 장애 시 폴백.
 - **CSV**: 벌크 다운로드 파일. 초기 전체 적재용 (수 GB).
 
-⚠️ 직판 테이블 슬러그는 문서에서 `fundamentals` 만 확인됨 — 나머지는
-   추정이며 무료 티어(다우 30)로 구독 전 검증한다. 틀리면 _DIRECT_TABLES
-   상수 한 줄씩만 고치면 된다.
+직판 스키마는 2026-08-05 실계정으로 검증됨: 슬러그 전부 200, 모든 테이블의
+기준 날짜 컬럼이 'date' 로 통일 (리네임으로 복원), 숫자는 문자열, DAILY 의
+marketcap/ev 는 백만 달러 단위 (달러로 환산).
 
 환경변수: SHARADAR_API_KEY (직판) / NASDAQ_DATA_LINK_API_KEY (폴백)
 """
@@ -39,8 +39,7 @@ logger = logging.getLogger(__name__)
 _NDL_URL = "https://data.nasdaq.com/api/v3/datatables/SHARADAR/{table}.json"
 _DIRECT_URL = "https://api.sharadar.com/v1.0/data/{table}"
 
-#: NDL 테이블 코드 → 직판 슬러그. 'fundamentals' 만 공식 문서에서 확인됨,
-#: 나머지는 무료 티어로 검증 후 필요시 수정 (docs/factor-system/04 §4).
+#: NDL 테이블 코드 → 직판 슬러그. 2026-08-05 실계정으로 전수 검증됨 (전부 200).
 _DIRECT_TABLES = {
     "SF1": "fundamentals",
     "SEP": "sep",
@@ -50,14 +49,23 @@ _DIRECT_TABLES = {
     "TICKERS": "tickers",
 }
 
-#: 직판 윈도잉 페이지네이션의 정렬/커서 기준 날짜 컬럼
-_DIRECT_PAGE_COL = {
-    "SF1": "datekey",
+#: 직판 윈도잉 페이지네이션의 정렬/커서 기준 날짜 컬럼.
+#: 직판 API 는 모든 테이블의 기준 날짜 컬럼명을 'date' 로 통일했다
+#: (SF1 의 datekey, SF2 의 filingdate, SF3A 의 calendardate 가 전부 date).
+_DIRECT_PAGE_COL: dict[str, str | None] = {
+    "SF1": "date",
     "SEP": "date",
     "DAILY": "date",
-    "SF2": "filingdate",
-    "SF3A": "calendardate",
+    "SF2": "date",
+    "SF3A": "date",
     "TICKERS": None,  # 소형 테이블 — 단일 요청
+}
+
+#: 직판 응답의 'date' → NDL/스토어 표준 컬럼명 복원 (실응답으로 검증)
+_DIRECT_RENAME: dict[str, dict[str, str]] = {
+    "SF1": {"date": "datekey"},
+    "SF2": {"date": "filingdate"},
+    "SF3A": {"date": "calendardate"},
 }
 
 #: 13F 집계(SF3A) 벤더 컬럼 → 표준 필드
@@ -66,6 +74,10 @@ _SF3A_RENAME = {"shrunits": "inst_shares", "shrholders": "inst_holders"}
 
 class TransientAPIError(RuntimeError):
     """재시도 대상 (429 / 5xx)."""
+
+
+def _ticker_param(tickers: list[str] | None) -> dict:
+    return {"ticker": ",".join(tickers)} if tickers else {}
 
 
 class SharadarProvider:
@@ -102,8 +114,10 @@ class SharadarProvider:
         self.page_size = page_size
 
     # ------------------------------------------------------------------ API
-    def fundamentals(self, since: str | None = None) -> Iterator[pd.DataFrame]:
-        params = {"dimension": DEFAULT_DIMENSION}
+    def fundamentals(
+        self, since: str | None = None, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
+        params = {"dimension": DEFAULT_DIMENSION, **_ticker_param(tickers)}
         if since:
             params["lastupdated.gte"] = since
         for chunk in self._paginate("SF1", params):
@@ -111,29 +125,45 @@ class SharadarProvider:
             validate_pit_frame(frame)
             yield frame
 
-    def prices(self, since: str | None = None) -> Iterator[pd.DataFrame]:
-        params: dict = {}
+    def prices(
+        self, since: str | None = None, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
+        params: dict = _ticker_param(tickers)
         if since:
             params["lastupdated.gte"] = since
         for chunk in self._paginate("SEP", params):
-            yield normalize_columns(chunk, "sharadar")
+            yield normalize_columns(_drop_raw_close(chunk), "sharadar")
 
-    def daily_metrics(self, since: str | None = None) -> Iterator[pd.DataFrame]:
-        """DAILY 테이블 — 일별 marketcap/ev. prices 와 같은 스토어 테이블로 합류."""
-        params: dict = {}
+    def daily_metrics(
+        self, since: str | None = None, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
+        """
+        DAILY 테이블 — 일별 marketcap/ev.
+
+        ⚠️ DAILY 의 marketcap/ev 는 **백만 달러 단위**다 (SF1 은 달러 단위 —
+        실응답으로 확인: AAPL 4,428,166.1 vs 4,508,288,143,800). 달러로
+        환산하지 않으면 PER 등 배수가 10⁶배 틀어지므로 여기서 통일한다.
+        """
+        params: dict = _ticker_param(tickers)
         if since:
             params["lastupdated.gte"] = since
         for chunk in self._paginate("DAILY", params):
-            yield normalize_columns(chunk, "sharadar")
+            frame = normalize_columns(chunk, "sharadar")
+            for col in ("mcap", "ev"):
+                if col in frame.columns:
+                    frame[col] = pd.to_numeric(frame[col], errors="coerce") * 1e6
+            yield frame
 
-    def institutions(self, since: str | None = None) -> Iterator[pd.DataFrame]:
+    def institutions(
+        self, since: str | None = None, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
         """
         SF3A (13F 티커별 집계).
 
         SF3 에는 공시일 컬럼이 없다 — 분기말 + 45일 (법정 기한) 로 보정한다.
         실제 공시일보다 보수적(늦은) 가정이므로 look-ahead 방향으로는 안전하다.
         """
-        params: dict = {}
+        params: dict = _ticker_param(tickers)
         if since:
             params["calendardate.gte"] = since
         for chunk in self._paginate("SF3A", params):
@@ -144,7 +174,9 @@ class SharadarProvider:
             validate_pit_frame(frame)
             yield frame
 
-    def insiders(self, since: str | None = None) -> Iterator[pd.DataFrame]:
+    def insiders(
+        self, since: str | None = None, tickers: list[str] | None = None
+    ) -> Iterator[pd.DataFrame]:
         """
         SF2 (Form 4) → 분기 집계.
 
@@ -153,14 +185,19 @@ class SharadarProvider:
         '분기 합계'는 분기가 끝나기 전엔 확정값이 아니다 (신고가 더 올 수 있음).
         Form 4 마감이 거래 후 2영업일이므로 +3일이면 전량 수집이 보장된다.
         """
-        params: dict = {}
+        params: dict = _ticker_param(tickers)
         if since:
             params["filingdate.gte"] = since
         for chunk in self._paginate("SF2", params):
             yield _aggregate_insiders(chunk)
 
-    def tickers(self) -> pd.DataFrame:
-        frames = list(self._paginate("TICKERS", {"table": "SF1"}))
+    def tickers(self, tickers: list[str] | None = None) -> pd.DataFrame:
+        # NDL 은 table=SF1 필터가 필요하지만, 직판은 이 필터에 빈 결과를
+        # 반환한다 (table 컬럼 값 체계가 다름 — 실적재에서 확인)
+        params = _ticker_param(tickers)
+        if self.api == "ndl":
+            params["table"] = "SF1"
+        frames = list(self._paginate("TICKERS", params))
         if not frames:
             return pd.DataFrame()
         raw = pd.concat(frames, ignore_index=True)
@@ -178,7 +215,7 @@ class SharadarProvider:
         """
         readers: dict[str, Callable[[pd.DataFrame], Iterator[pd.DataFrame]]] = {
             "fundamentals": lambda df: iter([_csv_fundamentals(df)]),
-            "prices": lambda df: iter([normalize_columns(df, "sharadar")]),
+            "prices": lambda df: iter([normalize_columns(_drop_raw_close(df), "sharadar")]),
             "institutions": lambda df: iter([_csv_institutions(df)]),
             "insiders": lambda df: iter([_aggregate_insiders(df)]),
         }
@@ -221,10 +258,12 @@ class SharadarProvider:
             frame = _parse_direct_payload(self._fetch(url, query))
             if frame.empty:
                 return
-            yield frame
+            # 커서는 리네임 전 벤더 컬럼('date')으로 계산한다
+            next_from = str(pd.to_datetime(frame[date_col]).max().date()) if date_col else None
+            yield frame.rename(columns=_DIRECT_RENAME.get(table, {}))
             if date_col is None or len(frame) < self.page_size:
                 return
-            window_from = str(pd.to_datetime(frame[date_col]).max().date())
+            window_from = next_from
 
     def _paginate_ndl(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
         """Nasdaq Data Link datatables — 커서 페이지네이션 (폴백 경로)."""
@@ -287,6 +326,16 @@ def _default_get_json(url: str, params: dict) -> dict | list:
     return payload
 
 
+def _drop_raw_close(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    SEP 에는 close(원시)와 closeadj 가 공존한다. normalize 가 closeadj→close 로
+    바꾸면 컬럼명이 중복되므로, 표준 스키마에 없는 원시 close 를 먼저 버린다.
+    """
+    if "closeadj" in df.columns and "close" in df.columns:
+        return df.drop(columns=["close"])
+    return df
+
+
 def _csv_fundamentals(df: pd.DataFrame) -> pd.DataFrame:
     frame = df[df.get("dimension", DEFAULT_DIMENSION) == DEFAULT_DIMENSION]
     frame = normalize_columns(frame, "sharadar")
@@ -307,7 +356,9 @@ def _aggregate_insiders(chunk: pd.DataFrame) -> pd.DataFrame:
     df = chunk.copy()
     df["filingdate"] = pd.to_datetime(df["filingdate"])
     df["calendardate"] = df["filingdate"] + pd.offsets.QuarterEnd(0)
-    # transactionshares: 매수 양수 / 매도 음수 (Sharadar 규약)
+    # transactionshares: 매수 양수 / 매도 음수 (Sharadar 규약).
+    # 직판 JSON 은 숫자를 문자열로 주므로 합산 전 강제 변환한다.
+    df["transactionshares"] = pd.to_numeric(df["transactionshares"], errors="coerce")
     grouped = (
         df.groupby(["ticker", "calendardate"])
         .agg(insider_net_shares=("transactionshares", "sum"))

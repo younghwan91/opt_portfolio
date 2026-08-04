@@ -133,8 +133,8 @@ def _ingest_csv(store: PITStore, args: argparse.Namespace) -> int:
     upsert = {
         "fundamentals": store.upsert_fundamentals,
         "prices": store.upsert_prices,
-        "institutions": store.upsert_ownership,
-        "insiders": store.upsert_ownership,
+        "institutions": store.upsert_institutions,
+        "insiders": store.upsert_insiders,
         "tickers": store.upsert_tickers,
     }[args.kind]
     total = 0
@@ -151,28 +151,29 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
     from opt_portfolio.factor.data.sharadar import SharadarProvider
 
     provider = SharadarProvider(api=args.api)
+    tickers = args.tickers.split(",") if args.tickers else None
     if not provider.api_key:
         raise SystemExit("API 키가 없습니다. NASDAQ_DATA_LINK_API_KEY 환경변수를 설정하세요.")
     tables = args.tables.split(",") if args.tables else ["sf1", "sep", "tickers"]
     for table in tables:
         total = 0
         if table == "sf1":
-            for chunk in provider.fundamentals(since=args.since):
+            for chunk in provider.fundamentals(since=args.since, tickers=tickers):
                 total += store.upsert_fundamentals(chunk)
         elif table == "sep":
-            for chunk in provider.prices(since=args.since):
+            for chunk in provider.prices(since=args.since, tickers=tickers):
                 total += store.upsert_prices(chunk)
         elif table == "daily":
-            for chunk in provider.daily_metrics(since=args.since):
+            for chunk in provider.daily_metrics(since=args.since, tickers=tickers):
                 total += store.upsert_prices(chunk)
         elif table == "sf3":
-            for chunk in provider.institutions(since=args.since):
-                total += store.upsert_ownership(chunk)
+            for chunk in provider.institutions(since=args.since, tickers=tickers):
+                total += store.upsert_institutions(chunk)
         elif table == "sf2":
-            for chunk in provider.insiders(since=args.since):
-                total += store.upsert_ownership(chunk)
+            for chunk in provider.insiders(since=args.since, tickers=tickers):
+                total += store.upsert_insiders(chunk)
         elif table == "tickers":
-            total += store.upsert_tickers(provider.tickers())
+            total += store.upsert_tickers(provider.tickers(tickers=tickers))
         else:
             raise SystemExit(f"알 수 없는 테이블: {table}")
         print(f"{table}: {total}행 적재")
@@ -286,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         help="sharadar 직판(기본) 또는 Nasdaq Data Link 폴백",
     )
     p.add_argument("--since", default=None)
+    p.add_argument("--tickers", default=None, help="쉼표 구분 종목 제한 (파일럿용)")
     p.add_argument("--csv", default=None)
     p.add_argument(
         "--kind",

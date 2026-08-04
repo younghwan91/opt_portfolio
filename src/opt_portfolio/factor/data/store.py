@@ -6,10 +6,15 @@ PIT 스토어 — DuckDB 기반 bitemporal 저장소
 | 테이블 | 키 | 내용 |
 |---|---|---|
 | fundamentals | (ticker, calendardate, dimension) | SF1 분기 재무 + datekey |
-| ownership | (ticker, calendardate) | 13F/내부자 집계 + datekey |
+| institutions | (ticker, calendardate) | 13F 집계 + datekey (분기말+45일) |
+| insiders | (ticker, calendardate) | 내부자 분기 집계 + datekey (분기말+3일) |
 | estimates | (ticker, calendardate) | 애널리스트 추정치 + datekey |
-| prices | (ticker, date) | 일별 가격·거래량·시총 |
+| prices | (ticker, date) | 일별 가격·거래량·시총 (SEP+DAILY 컬럼 병합) |
 | tickers | (ticker) | 섹터·소재지·유형 메타 |
+
+13F 와 내부자를 다른 테이블에 두는 이유: 같은 분기라도 공시 지연이
+다르다 (+45일 vs +3일). 한 테이블에 datekey 하나로 합치면 둘 중 하나의
+가용 시점이 왜곡된다 — 실데이터 적재에서 확인된 설계 결함의 수정.
 
 퀀트 관점:
 - 같은 (ticker, calendardate) 에 공시가 여러 번 오면 (정정공시)
@@ -40,7 +45,8 @@ def _quarterly_fields(sources: tuple[str, ...]) -> list[str]:
 
 
 FUND_FIELDS = _quarterly_fields(("SF1",))
-OWNERSHIP_FIELDS = _quarterly_fields(("SF2", "SF3"))
+INSTITUTION_FIELDS = _quarterly_fields(("SF3",))
+INSIDER_FIELDS = _quarterly_fields(("SF2",))
 ESTIMATE_FIELDS = _quarterly_fields(("FMP",))
 PRICE_FIELDS = sorted(
     s.name for s in schema.FIELDS.values() if s.grid == "daily" and s.kind in ("price", "stock")
@@ -81,16 +87,20 @@ class PITStore:
             )
             """
         )
-        self.conn.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS ownership (
-                ticker VARCHAR NOT NULL,
-                calendardate DATE NOT NULL,
-                datekey DATE NOT NULL,
-                {cols(OWNERSHIP_FIELDS)}
+        for table, fields in (
+            ("institutions", INSTITUTION_FIELDS),
+            ("insiders", INSIDER_FIELDS),
+        ):
+            self.conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {table} (
+                    ticker VARCHAR NOT NULL,
+                    calendardate DATE NOT NULL,
+                    datekey DATE NOT NULL,
+                    {cols(fields)}
+                )
+                """
             )
-            """
-        )
         self.conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS estimates (
@@ -126,10 +136,13 @@ class PITStore:
             defaults={"dimension": schema.DEFAULT_DIMENSION},
         )
 
-    def upsert_ownership(self, df: pd.DataFrame) -> int:
+    def upsert_institutions(self, df: pd.DataFrame) -> int:
         return self._upsert(
-            "ownership", df, keys=("ticker", "calendardate"), fields=OWNERSHIP_FIELDS
+            "institutions", df, keys=("ticker", "calendardate"), fields=INSTITUTION_FIELDS
         )
+
+    def upsert_insiders(self, df: pd.DataFrame) -> int:
+        return self._upsert("insiders", df, keys=("ticker", "calendardate"), fields=INSIDER_FIELDS)
 
     def upsert_estimates(self, df: pd.DataFrame) -> int:
         return self._upsert(
@@ -138,7 +151,12 @@ class PITStore:
 
     def upsert_prices(self, df: pd.DataFrame) -> int:
         return self._upsert(
-            "prices", df, keys=("ticker", "date"), fields=PRICE_FIELDS, has_datekey=False
+            "prices",
+            df,
+            keys=("ticker", "date"),
+            fields=PRICE_FIELDS,
+            has_datekey=False,
+            merge_fields=True,  # SEP(가격)와 DAILY(시총)가 같은 행의 다른 컬럼을 채운다
         )
 
     def upsert_tickers(self, df: pd.DataFrame) -> int:
@@ -161,6 +179,7 @@ class PITStore:
         defaults: dict[str, str] | None = None,
         has_datekey: bool = True,
         string_fields: bool = False,
+        merge_fields: bool = False,
     ) -> int:
         if df.empty:
             return 0
@@ -174,6 +193,8 @@ class PITStore:
         if missing:
             raise ValueError(f"{table} 업서트에 필수 컬럼 누락: {missing}")
 
+        # 중복 컬럼 방어 — 어댑터 버그가 있어도 스토어는 깨지지 않게
+        frame = frame.loc[:, ~frame.columns.duplicated()]
         present_fields = [f for f in fields if f in frame.columns]
         all_cols = required + present_fields
         frame = frame[all_cols]
@@ -191,8 +212,9 @@ class PITStore:
 
         self.conn.register("_incoming", frame)
         key_match = " AND ".join(f"t.{k} = i.{k}" for k in keys)
-        # 기존 행이 있으면 유지 (최초 공시 우선), 없는 행만 삽입
         col_list = ", ".join(f'"{c}"' for c in all_cols)
+        # 없는 행 삽입. PIT 테이블은 기존 행 유지(최초 공시 우선),
+        # merge_fields 테이블은 기존 행의 빈 컬럼을 추가로 채운다.
         result = self.conn.execute(
             f"""
             INSERT INTO {table} ({col_list})
@@ -200,6 +222,11 @@ class PITStore:
             WHERE NOT EXISTS (SELECT 1 FROM {table} t WHERE {key_match})
             """
         ).fetchone()
+        if merge_fields and present_fields:
+            set_clause = ", ".join(f'"{f}" = COALESCE(i."{f}", t."{f}")' for f in present_fields)
+            self.conn.execute(
+                f"UPDATE {table} t SET {set_clause} FROM _incoming i WHERE {key_match}"
+            )
         self.conn.unregister("_incoming")
         count = int(result[0]) if result else 0  # DuckDB INSERT 는 삽입 행수를 반환
         logger.info("%s: %d행 삽입 (%d행 수신)", table, count, len(df))
@@ -230,11 +257,15 @@ class PITStore:
         if fund_avail is not None:
             avail_by_source["SF1"] = fund_avail
 
-        own, own_avail = self._load_quarterly("ownership", OWNERSHIP_FIELDS, tickers)
-        quarterly.update(own)
-        if own_avail is not None:
-            avail_by_source["SF2"] = own_avail
-            avail_by_source["SF3"] = own_avail
+        inst, inst_avail = self._load_quarterly("institutions", INSTITUTION_FIELDS, tickers)
+        quarterly.update(inst)
+        if inst_avail is not None:
+            avail_by_source["SF3"] = inst_avail
+
+        ins, ins_avail = self._load_quarterly("insiders", INSIDER_FIELDS, tickers)
+        quarterly.update(ins)
+        if ins_avail is not None:
+            avail_by_source["SF2"] = ins_avail
 
         est, est_avail = self._load_quarterly("estimates", ESTIMATE_FIELDS, tickers)
         quarterly.update(est)
@@ -341,7 +372,8 @@ class PITStore:
         rows = []
         for table, date_col in [
             ("fundamentals", "calendardate"),
-            ("ownership", "calendardate"),
+            ("institutions", "calendardate"),
+            ("insiders", "calendardate"),
             ("estimates", "calendardate"),
             ("prices", "date"),
         ]:

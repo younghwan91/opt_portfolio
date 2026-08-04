@@ -87,7 +87,7 @@ def populate(store: PITStore, seed: int = 21) -> None:
         for i, q in enumerate(QUARTERS)
         for t in NORMAL[:5]
     ]
-    store.upsert_ownership(pd.DataFrame(own_rows))
+    store.upsert_institutions(pd.DataFrame(own_rows))
 
     # ---- 메타
     meta_rows = []
