@@ -124,6 +124,9 @@ no_implicit_optional = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --cov=src/opt_portfolio --cov-report=term-missing"
+# 테스트가 공용 픽스처를 `from tests.factor.conftest import ...` 로 가져온다.
+# tests/ 는 패키지가 아니므로 루트를 경로에 넣어줘야 수집이 성공한다.
+pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["src/opt_portfolio"]
