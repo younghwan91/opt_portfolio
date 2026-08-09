@@ -84,6 +84,16 @@ class TransientAPIError(RuntimeError):
     """재시도 대상 (429 / 5xx)."""
 
 
+class TruncatedDataError(RuntimeError):
+    """
+    페이지네이션이 전 구간을 받지 못하고 끝났다 — 조용히 넘어가면 안 되는 상황.
+
+    이 저장소의 실데이터 버그는 전부 절단이 '성공' 로그와 함께 발생해서
+    한참 뒤에야 드러났다. 부분 데이터로 백테스트를 돌리면 수익률이 조용히
+    틀리므로, 잘린 것이 확실한 경로에서는 진행하지 않고 즉시 실패한다.
+    """
+
+
 def _ticker_param(tickers: list[str] | None) -> dict:
     """NDL 경로 전용 — 직판은 청크 단위로 ticker 를 직접 세팅한다."""
     return {"ticker": ",".join(tickers)} if tickers else {}
@@ -318,15 +328,18 @@ class SharadarProvider:
                 return
             newest = str(pd.to_datetime(frame[date_col]).max().date())
             if newest == from_date:
-                # 한 날짜의 행수가 페이지 한도를 넘어 전진이 불가능하다
-                logger.warning(
-                    "페이지 전진 불가 (%s 하루 행수 > 한도) — 청크를 줄이세요: %s",
-                    newest,
-                    params.get("ticker", "<no ticker>"),
+                # 한 날짜의 행수가 페이지 한도를 넘어 전진이 불가능하다.
+                # 여기서 멈추면 newest 이후 구간이 통째로 누락된다.
+                raise TruncatedDataError(
+                    f"페이지 전진 불가 — {newest} 하루 행수가 한도({self.page_size})를 "
+                    f"넘어 이후 구간을 받을 수 없습니다. 티커 청크를 줄이세요 "
+                    f"(대상: {params.get('ticker', '<no ticker>')})"
                 )
-                return
             from_date = newest
-        logger.warning("페이지 상한 도달 — 데이터가 잘렸을 수 있습니다: %s", params)
+        raise TruncatedDataError(
+            f"페이지 상한(500) 도달 — {from_date} 이후 구간이 누락됐습니다. "
+            f"티커 청크를 줄이거나 기간을 나눠 요청하세요 (대상: {params})"
+        )
 
     def _paginate_ndl(self, table: str, params: dict) -> Iterator[pd.DataFrame]:
         """Nasdaq Data Link datatables — 커서 페이지네이션 (폴백 경로)."""

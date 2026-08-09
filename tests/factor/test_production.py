@@ -10,7 +10,7 @@ import pytest
 
 from opt_portfolio.factor.backtest.engine import BacktestConfig
 from opt_portfolio.factor.data.provider import validate_pit_frame
-from opt_portfolio.factor.data.sharadar import SharadarProvider
+from opt_portfolio.factor.data.sharadar import SharadarProvider, TruncatedDataError
 from opt_portfolio.factor.data.store import PITStore
 from opt_portfolio.factor.dsl.expr import F
 from opt_portfolio.factor.optimize.walkforward import run_walk_forward
@@ -394,8 +394,14 @@ class TestDirectAPI:
         assert calls[1]["from"] == "2024-05-02"  # 1페이지 최신 date 에서 이어받기
         assert "datekey" in chunks[0].columns
 
-    def test_stops_when_single_date_exceeds_page(self) -> None:
-        """한 날짜가 페이지를 꽉 채우면 전진 불가 — 무한루프 대신 경고 후 종료."""
+    def test_raises_when_single_date_exceeds_page(self) -> None:
+        """
+        한 날짜가 페이지를 꽉 채우면 전진 불가 — 무한루프를 막되 조용히 끝내지 않는다.
+
+        여기서 그냥 return 하면 해당 날짜 이후 구간이 통째로 누락된 채
+        '성공'으로 보고된다. 부분 데이터로 백테스트가 돌아가는 것을 막기 위해
+        TruncatedDataError 로 즉시 실패한다.
+        """
         same_day = {
             "count": 2,
             "data": [
@@ -410,8 +416,33 @@ class TestDirectAPI:
             return same_day
 
         provider = SharadarProvider(api_key="t", get_json=fake_get, api="direct", page_size=2)
-        list(provider.prices(tickers=["A", "B"]))
-        assert len(calls) <= 3  # 전진 불가 감지 후 중단
+        with pytest.raises(TruncatedDataError, match="페이지 전진 불가"):
+            list(provider.prices(tickers=["A", "B"]))
+        assert len(calls) <= 3  # 무한루프가 아니라 즉시 감지
+
+    def test_raises_when_page_cap_reached(self) -> None:
+        """
+        페이지 상한(500)까지 계속 꽉 찬 페이지가 오면 뒷구간이 남아 있다는 뜻이다.
+
+        상한은 무한루프 방지장치일 뿐 '데이터를 다 받았다'는 신호가 아니므로,
+        여기서 조용히 끝내면 절단이 성공으로 둔갑한다.
+        """
+        day = iter(pd.date_range("2000-01-03", periods=600, freq="D"))
+
+        def fake_get(url: str, params: dict) -> dict:
+            d = next(day).strftime("%Y-%m-%d")
+            # 항상 page_size 만큼 꽉 채워 돌려준다 = 아직 남았다는 신호
+            return {
+                "count": 2,
+                "data": [
+                    {"ticker": "A", "date": d, "closeadj": 1.0},
+                    {"ticker": "B", "date": d, "closeadj": 2.0},
+                ],
+            }
+
+        provider = SharadarProvider(api_key="t", get_json=fake_get, api="direct", page_size=2)
+        with pytest.raises(TruncatedDataError, match="페이지 상한"):
+            list(provider.prices(tickers=["A", "B"]))
 
     def test_chunks_tickers_to_stay_under_page_limit(self) -> None:
         """SEP 은 티커당 행수가 커서 소규모 청크로 쪼개 요청해야 한다."""
