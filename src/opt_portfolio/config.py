@@ -237,29 +237,6 @@ class BacktestConfig:
     OPTIMIZATION_STEP: float = 0.05  # 5% 단위로 최적화
 
 
-@dataclass(frozen=True)
-class UIConfig:
-    """UI configuration settings."""
-
-    PAGE_TITLE: str = "Optimal Portfolio Management System"
-    PAGE_ICON: str = "🚀"
-    LAYOUT: str = "wide"
-
-    # Chart settings
-    CHART_HEIGHT: int = 400
-    CHART_WIDTH: int = 800
-
-    # Color scheme
-    COLORS = {
-        "positive": "#00C851",
-        "negative": "#ff4444",
-        "neutral": "#33b5e5",
-        "warning": "#ffbb33",
-        "primary": "#2196F3",
-        "secondary": "#757575",
-    }
-
-
 # Global configuration instances
 ASSETS = AssetUniverse()
 ALLOCATION = AllocationConfig()
@@ -267,7 +244,6 @@ MOMENTUM = MomentumConfig()
 OU_PROCESS = OUProcessConfig()
 CACHE = CacheConfig()
 BACKTEST = BacktestConfig()
-UI = UIConfig()
 
 
 # Risk-Free Rate (for Sharpe Ratio calculations)

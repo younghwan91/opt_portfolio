@@ -12,7 +12,6 @@ make install           # uv sync --extra dev
 
 # Run
 make run               # interactive menu
-make web               # Streamlit UI
 python3 run.py --cli   # CLI
 python3 run.py --backtest
 python3 run.py --optimize

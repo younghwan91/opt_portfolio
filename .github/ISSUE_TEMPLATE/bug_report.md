@@ -36,4 +36,4 @@ assignees: ""
 - OS: [예: Ubuntu 22.04, macOS 14, Windows 11]
 - Python 버전: [예: 3.12.3]
 - 패키지 버전: [예: opt-portfolio 1.0.0]
-- 실행 방법: [예: Web UI / CLI / run.py --backtest]
+- 실행 방법: [예: CLI / run.py --backtest]

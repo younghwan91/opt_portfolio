@@ -244,15 +244,14 @@ python run.py
 ============================================================
 
 Choose an option:
-1. 🌐 Launch Web UI
-2. 💻 Launch CLI
-3. 📊 Quick VAA Analysis
-4. 📈 Run Dynamic VAA Backtest
-5. 🔬 Run Optimized Backtest (Sharpe Ratio)
-6. 📉 Compare VAA Strategies
-7. 📊 Plot Momentum History
-8. 💾 Cache Management
-9. ❌ Exit
+1. 💻 Launch CLI
+2. 📊 Quick VAA Analysis
+3. 📈 Run Dynamic VAA Backtest
+4. 🔬 Run Optimized Backtest (Sharpe Ratio)
+5. 📉 Compare VAA Strategies
+6. 📊 Plot Momentum History
+7. 💾 Cache Management
+8. ❌ Exit
 ```
 
 ### 2. 명령줄 옵션
