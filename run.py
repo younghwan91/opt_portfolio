@@ -7,23 +7,12 @@ VAA (Vigilant Asset Allocation) 전략 기반 포트폴리오 관리 시스템
 
 Usage:
     python run.py              # Interactive menu
-    python run.py --web        # Launch web UI
     python run.py --cli        # Launch CLI
     python run.py --backtest   # Run dynamic backtest
     python run.py --optimize   # Run optimization
 """
 
-import subprocess
-import sys
 import argparse
-from pathlib import Path
-
-
-def launch_web_ui():
-    """Launch the Streamlit web interface."""
-    print("\n🌐 Launching Web UI...")
-    app_path = Path(__file__).parent / "src" / "opt_portfolio" / "ui" / "streamlit_app.py"
-    subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)])
 
 
 def launch_cli():
@@ -193,15 +182,10 @@ def cache_management():
 def main():
     """Main entry point with menu."""
     parser = argparse.ArgumentParser(description="Optimal Portfolio Management System")
-    parser.add_argument("--web", action="store_true", help="Launch web UI")
     parser.add_argument("--cli", action="store_true", help="Launch CLI")
     parser.add_argument("--backtest", action="store_true", help="Run dynamic backtest")
     parser.add_argument("--optimize", action="store_true", help="Run optimization")
     args = parser.parse_args()
-    
-    if args.web:
-        launch_web_ui()
-        return
     
     if args.cli:
         launch_cli()
@@ -222,35 +206,32 @@ def main():
     
     while True:
         print("\nChoose an option:")
-        print("1. 🌐 Launch Web UI")
-        print("2. 💻 Launch CLI")
-        print("3. 📊 Quick VAA Analysis")
-        print("4. 📈 Run Dynamic VAA Backtest")
-        print("5. 🔬 Run Optimized Backtest (Sharpe Ratio)")
-        print("6. 📉 Compare VAA Strategies")
-        print("7. 📊 Plot Momentum History")
-        print("8. 💾 Cache Management")
-        print("9. ❌ Exit")
-        
-        choice = input("\nEnter choice (1-9): ").strip()
-        
+        print("1. 💻 Launch CLI")
+        print("2. 📊 Quick VAA Analysis")
+        print("3. 📈 Run Dynamic VAA Backtest")
+        print("4. 🔬 Run Optimized Backtest (Sharpe Ratio)")
+        print("5. 📉 Compare VAA Strategies")
+        print("6. 📊 Plot Momentum History")
+        print("7. 💾 Cache Management")
+        print("8. ❌ Exit")
+
+        choice = input("\nEnter choice (1-8): ").strip()
+
         if choice == "1":
-            launch_web_ui()
-        elif choice == "2":
             launch_cli()
-        elif choice == "3":
+        elif choice == "2":
             run_vaa_analysis()
-        elif choice == "4":
+        elif choice == "3":
             run_dynamic_backtest()
-        elif choice == "5":
+        elif choice == "4":
             run_optimized_backtest()
-        elif choice == "6":
+        elif choice == "5":
             run_strategy_comparison()
-        elif choice == "7":
+        elif choice == "6":
             plot_momentum()
-        elif choice == "8":
+        elif choice == "7":
             cache_management()
-        elif choice == "9":
+        elif choice == "8":
             print("\n👋 Goodbye!")
             break
         else:

@@ -56,8 +56,7 @@ Data flows through layered components:
 4. **Portfolio layer** (`src/opt_portfolio/core/portfolio.py`) — Tracks positions (`Position`), handles buy/sell `Transaction`s and rebalancing.
 
 5. **UI layer** (`src/opt_portfolio/ui/`)
-   - `streamlit_app.py` — Web UI with interactive Plotly charts
-   - `cli.py` — Terminal menu (supports Korean/Japanese)
+   - `cli.py` — Terminal menu (supports Korean/Japanese). Terminal-only; there is no web UI.
 
 ## Key Conventions
 

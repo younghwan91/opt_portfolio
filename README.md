@@ -133,7 +133,7 @@ assert config.validate()  # 합이 1.0인지 확인
 - ❌ `port_ratio_calculator.py` → `src/opt_portfolio/core/portfolio.py`로 통합
 - ❌ `rebalance.py` → 기능이 백테스트 엔진에 포함됨
 - ❌ `backtest_comparison.py` → 새로운 백테스트 엔진으로 대체
-- ❌ `portfolio_ui.py` → `src/opt_portfolio/ui/streamlit_app.py` 사용
+- ❌ `portfolio_ui.py` → `src/opt_portfolio/ui/cli.py` 사용 (웹 UI 는 제거됨)
 - ❌ `integrated_portfolio.py` → CLI로 통합
 - ❌ `main.py` → `run.py`로 통합
 
@@ -189,8 +189,7 @@ opt_portfolio/
 │   │   └── performance.py    # 성과 분석
 │   │
 │   ├── ui/                    # 사용자 인터페이스
-│   │   ├── streamlit_app.py  # 웹 UI
-│   │   └── cli.py            # CLI
+│   │   └── cli.py            # CLI (터미널 전용)
 │   │
 │   └── utils/                 # 유틸리티
 │       ├── helpers.py
@@ -259,9 +258,6 @@ Choose an option:
 ### 2. 명령줄 옵션
 
 ```bash
-# 웹 UI 실행
-python run.py --web
-
 # 동적 VAA 백테스트 (15년)
 python run.py --backtest
 

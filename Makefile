@@ -1,4 +1,4 @@
-.PHONY: install test test-one lint format typecheck run web clean help
+.PHONY: install test test-one lint format typecheck run clean help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -9,7 +9,6 @@ help:
 	@echo "  make format      - 코드 자동 포맷 (black, isort)"
 	@echo "  make typecheck   - 타입 검사 (mypy)"
 	@echo "  make run         - 인터랙티브 메뉴 실행"
-	@echo "  make web         - Streamlit Web UI 실행"
 	@echo "  make clean       - 임시 파일 정리"
 
 install:
@@ -34,9 +33,6 @@ typecheck:
 
 run:
 	python3 run.py
-
-web:
-	python3 run.py --web
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
