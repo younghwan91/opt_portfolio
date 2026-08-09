@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from opt_portfolio.config import RISK_FREE_RATE
 from opt_portfolio.factor.optimize.search import (
     Params,
     ParamSpace,
@@ -123,10 +124,14 @@ class WalkForwardResult:
         sr_var = float(np.var(objectives)) if len(objectives) > 1 else None
         return deflated_sharpe_ratio(self.oos_returns, max(self.n_trials_total, 1), sr_var)
 
-    def sharpe(self, ann: int = 252) -> float:
+    def sharpe(self, ann: int = 252, risk_free_rate: float = RISK_FREE_RATE) -> float:
+        """OOS Sharpe — 초과수익 기준 (`config.RISK_FREE_RATE`)."""
         r = self.oos_returns.dropna()
         sd = r.std(ddof=1)
-        return float(r.mean() / sd * np.sqrt(ann)) if sd > 0 else np.nan
+        if sd <= 0:
+            return np.nan
+        excess = r - risk_free_rate / ann
+        return float(excess.mean() / sd * np.sqrt(ann))
 
     def param_stability(self) -> pd.DataFrame:
         """
@@ -136,12 +141,21 @@ class WalkForwardResult:
         return pd.DataFrame(self.params_per_fold, index=range(len(self.folds)))
 
 
-def annualized_sharpe(returns: pd.Series, ann: int = 252) -> float:
-    """기본 목적함수. 관측 60일 미만이면 -inf (탐색에서 자연 도태)."""
+def annualized_sharpe(
+    returns: pd.Series, ann: int = 252, risk_free_rate: float = RISK_FREE_RATE
+) -> float:
+    """
+    기본 목적함수 — 초과수익 기준 Sharpe. 관측 60일 미만이면 -inf (탐색에서 자연 도태).
+
+    무위험이자율을 빼지 않으면 채택 관문(OOS Sharpe > 0.5)이 rf/변동성 만큼
+    느슨해지고, 기존 VAA 쪽 지표와도 숫자를 비교할 수 없다.
+    """
     r = returns.dropna()
-    if len(r) < 60 or r.std(ddof=1) == 0:
+    sd = r.std(ddof=1)
+    if len(r) < 60 or sd == 0:
         return -np.inf
-    return float(r.mean() / r.std(ddof=1) * np.sqrt(ann))
+    excess = r - risk_free_rate / ann
+    return float(excess.mean() / sd * np.sqrt(ann))
 
 
 def run_walk_forward(

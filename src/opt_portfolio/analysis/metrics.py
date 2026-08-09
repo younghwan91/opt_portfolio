@@ -14,6 +14,8 @@ Centralizing these prevents duplication and ensures consistent formulas.
 import numpy as np
 import pandas as pd
 
+from opt_portfolio.config import RISK_FREE_RATE
+
 
 def calculate_cagr(initial_value: float, final_value: float, years: float) -> float:
     """
@@ -34,15 +36,18 @@ def calculate_cagr(initial_value: float, final_value: float, years: float) -> fl
 
 def calculate_sharpe_ratio(
     returns: pd.Series,
-    risk_free_rate: float = 0.02,
+    risk_free_rate: float = RISK_FREE_RATE,
     periods_per_year: int = 12,
 ) -> float:
     """
     Calculate annualised Sharpe Ratio.
 
+    무위험이자율 기본값은 프로젝트 단일 상수(`config.RISK_FREE_RATE`)를 따른다.
+    여기에만 별도 값(2%)이 박혀 있어 risk.py·optimizer.py 와 다른 숫자가 나왔다.
+
     Args:
         returns: Periodic return series (e.g. monthly)
-        risk_free_rate: Annual risk-free rate (default 2%)
+        risk_free_rate: Annual risk-free rate (default: config.RISK_FREE_RATE)
         periods_per_year: Number of periods per year (12 for monthly)
 
     Returns:

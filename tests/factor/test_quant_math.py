@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from opt_portfolio.analysis.metrics import calculate_sharpe_ratio
+from opt_portfolio.config import RISK_FREE_RATE
+from opt_portfolio.factor.optimize.walkforward import annualized_sharpe
 from opt_portfolio.factor.portfolio.covariance import ledoit_wolf_cc
 from opt_portfolio.factor.portfolio.score import composite_score, rank_normalize
 from opt_portfolio.factor.portfolio.weights import (
@@ -187,3 +190,38 @@ class TestScore:
         score = composite_score({"f1": full, "f2": partial}, min_coverage=0.75)
         assert score[["a", "b"]].notna().all().all()
         assert score[["c", "d"]].isna().all().all()
+
+
+class TestSharpeConvention:
+    """
+    Sharpe 는 프로젝트 전체가 초과수익 기준으로 통일돼 있다.
+
+    팩터 엔진이 rf 를 빼지 않으면 채택 관문(OOS Sharpe > 0.5)이 rf/변동성 만큼
+    느슨해지고, 기존 VAA 지표와 숫자를 비교할 수 없다.
+    """
+
+    def test_factor_sharpe_subtracts_risk_free_rate(self) -> None:
+        rng = np.random.default_rng(7)
+        returns = pd.Series(rng.normal(0.0006, 0.012, 500))
+
+        with_rf = annualized_sharpe(returns)
+        without_rf = annualized_sharpe(returns, risk_free_rate=0.0)
+        assert with_rf < without_rf, "무위험이자율이 차감되지 않았다"
+
+    def test_factor_sharpe_default_matches_project_constant(self) -> None:
+        """기본값이 config 단일 상수를 따라야 VAA 쪽과 규약이 같다."""
+        rng = np.random.default_rng(11)
+        returns = pd.Series(rng.normal(0.0006, 0.012, 500))
+
+        assert annualized_sharpe(returns) == pytest.approx(
+            annualized_sharpe(returns, risk_free_rate=RISK_FREE_RATE)
+        )
+
+    def test_legacy_metrics_default_matches_project_constant(self) -> None:
+        """analysis/metrics.py 에 2% 가 따로 박혀 있던 문제의 회귀 방지."""
+        rng = np.random.default_rng(13)
+        returns = pd.Series(rng.normal(0.01, 0.03, 60))
+
+        assert calculate_sharpe_ratio(returns) == pytest.approx(
+            calculate_sharpe_ratio(returns, risk_free_rate=RISK_FREE_RATE)
+        )

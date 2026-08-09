@@ -87,6 +87,21 @@ result.param_stability()  # 폴드별 선택 파라미터 — 널뛰면 노이�
 3. **embargo** 가 train/test 사이 순방향 수익률 겹침을 차단한다 (purged CV 논리).
 4. **실패한 시도는 −∞ 로 기록**되어 탐색은 계속되되 통계에는 남는다.
 
+### Sharpe 규약 — 초과수익 기준 (프로젝트 전역)
+
+아래 관문의 Sharpe 는 전부 **초과수익 기준**이다.
+
+```
+Sharpe = mean(r − rf/ann) / std(r, ddof=1) × √ann        rf = config.RISK_FREE_RATE
+```
+
+- 무위험이자율은 **`config.RISK_FREE_RATE` 단일 상수**를 따른다. 팩터 엔진
+  (`annualized_sharpe`, `WalkForwardResult.sharpe`)과 기존 자산배분
+  (`analysis/metrics.py`)이 같은 값을 쓰므로 두 시스템의 숫자를 직접 비교할 수 있다.
+- rf 를 빼지 않으면 아래 ①·⑤ 관문이 대략 **rf / 변동성** 만큼 느슨해진다
+  (변동성 15%, rf 5% 기준 약 0.33). 관문 수치는 초과수익 기준으로 정해진 값이다.
+- 회귀 방지: `tests/factor/test_quant_math.py::TestSharpeConvention`.
+
 ### 판정 절차 (전략 승인 조건)
 
 | 단계 | 조건 | 실패 시 |
