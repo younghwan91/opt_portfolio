@@ -107,6 +107,41 @@ Fundamentals $19 / Prices $9 / Investors $9 / **Bundle $29**. 히스토리 축 �
    한도(10,000)를 넘는다 → 무필터 조회는 이제 `TruncatedDataError` 로
    즉시 실패한다 (조용히 잘리지 않는다).
 
+## 4-1. 구독 첫날 실행 순서
+
+풀 히스토리 Bundle 결제 직후, 위에서 아래로 그대로 실행한다.
+
+```bash
+export SHARADAR_API_KEY=...
+
+# ① 벤더 계약 검증 — 전사(轉寫)된 가정이 실제 응답과 맞는지 먼저 본다
+uv run python scripts/record_sharadar_fixtures.py
+uv run pytest tests/factor/test_vendor_contract.py -q     # skip 이 사라져야 정상
+
+# ② 유니버스 확정 — 폐지 종목이 여기서 들어온다.
+#    TICKERS 벌크 CSV 를 받아 적재한다 (API 무필터 조회는 10,000 에서 잘린다).
+opt-factor ingest --store us.duckdb --provider csv --kind tickers --csv tickers.csv
+
+# ③ 본 적재 — 유니버스를 스토어에서 가져온다 (자동 탐색은 폐지 종목을 놓친다).
+#    풀 히스토리는 티커당 행수가 5년의 5~6배라 청크를 줄인다.
+opt-factor ingest --store us.duckdb --provider sharadar --universe store \
+  --tables sf1,sep,daily,sf3,sf2 --chunk 1
+
+# ④ 수치 검증 — 아래 SQL 로 절단 여부를 확인한다 (status 만으로는 부족)
+opt-factor status --store us.duckdb
+
+# ⑤ 공식 성과
+opt-factor optimize --store us.duckdb \
+  --config configs/strategy.json --space configs/space.json
+```
+
+`configs/strategy.json` 과 `configs/space.json` 은 즉시 실행 가능한 기본값이며
+`tests/factor/test_shipped_configs.py` 가 코드와의 정합을 지킨다. 구독 데이터셋이
+늘면 `subscribed` 를 갱신한다 — 미구독 팩터는 자동 제외된다.
+
+**②가 핵심이다.** `--universe store` 없이 돌리면 `accessible_tickers()` 자동
+탐색이 최근 분기 재무가 있는 종목만 찾아, 돈 주고 받은 폐지 종목을 그대로 버린다.
+
 ## 5. 운영 절차
 
 ```bash

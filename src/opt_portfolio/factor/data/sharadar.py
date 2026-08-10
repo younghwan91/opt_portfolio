@@ -115,10 +115,14 @@ class SharadarProvider:
         get_json: Callable[[str, dict], dict] | None = None,
         page_size: int = 10_000,
         api: str = "direct",
+        chunk_size: int | None = None,
     ) -> None:
         """
         Args:
             api: "direct" (sharadar.com, 기본) 또는 "ndl" (Nasdaq Data Link 폴백)
+            chunk_size: 티커 청크 크기를 전 테이블 공통으로 덮어쓴다.
+                기본값(`_DIRECT_CHUNK`)은 **5년 히스토리 기준**이라, 풀
+                히스토리를 받으면 티커당 행수가 늘어 청크를 줄여야 한다.
         """
         if api not in ("direct", "ndl"):
             raise ValueError(f"api 는 'direct' 또는 'ndl' 이어야 합니다: {api!r}")
@@ -131,6 +135,7 @@ class SharadarProvider:
         )
         self._get_json = get_json or _default_get_json
         self.page_size = page_size
+        self.chunk_size = chunk_size
 
     # ------------------------------------------------------------------ API
     def fundamentals(
@@ -288,7 +293,7 @@ class SharadarProvider:
         rename = _DIRECT_RENAME.get(table, {})
 
         if tickers:
-            size = _DIRECT_CHUNK.get(table, 50)
+            size = self.chunk_size or _DIRECT_CHUNK.get(table, 50)
             groups: list[list[str] | None] = [
                 tickers[i : i + size] for i in range(0, len(tickers), size)
             ]

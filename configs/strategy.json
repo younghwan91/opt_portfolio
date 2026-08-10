@@ -1,0 +1,33 @@
+{
+  "factors": [
+    "PBR", "PER", "PSR",
+    "EV_EBITDA", "EV_GP",
+    "ROE", "ROIC", "GP_A",
+    "REVENUE_GROWTH_YOY", "OPINC_GROWTH_YOY",
+    "MOM_12_1", "MOM_6M"
+  ],
+  "factor_weights": null,
+
+  "universe": {
+    "exclude_financials": true,
+    "exclude_distressed": true,
+    "exclude_china": true,
+    "exclude_ptp": true,
+    "min_price_usd": 5.0,
+    "min_adv_usd": 1000000.0
+  },
+
+  "backtest": {
+    "n_stocks": 30,
+    "rebalance": "ME",
+    "weighting": "equal",
+    "max_weight": 0.10,
+    "cov_window": 252,
+    "cost": {}
+  },
+
+  "timing_ma_days": null,
+  "benchmark": "SPY",
+  "signal_freq": "ME",
+  "subscribed": ["SF1", "SEP"]
+}

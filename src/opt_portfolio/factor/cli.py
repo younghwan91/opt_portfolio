@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from dataclasses import fields as dc_fields
 from pathlib import Path
@@ -147,11 +148,54 @@ def _ingest_csv(store: PITStore, args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_ticker_file(path: Path) -> list[str]:
+    """
+    유니버스 파일 → 티커 목록.
+
+    TICKERS 벌크 CSV(`ticker` 컬럼) 또는 줄/쉼표 구분 텍스트를 받는다.
+    18,000종목을 명령줄 인자로 넘기는 것은 현실적이지 않으므로 이 경로가
+    풀 유니버스 적재의 정규 입력이다.
+    """
+    if not path.exists():
+        raise SystemExit(f"유니버스 파일이 없습니다: {path}")
+    if path.suffix.lower() == ".csv":
+        frame = pd.read_csv(path)
+        if "ticker" not in frame.columns:
+            raise SystemExit(f"{path} 에 'ticker' 컬럼이 없습니다: {list(frame.columns)[:8]}")
+        names = frame["ticker"].dropna().astype(str)
+    else:
+        names = pd.Series(re.split(r"[,\s]+", path.read_text()))
+    out = sorted({t.strip().upper() for t in names if t and t.strip()})
+    if not out:
+        raise SystemExit(f"유니버스 파일이 비었습니다: {path}")
+    return out
+
+
+def _resolve_universe(store: PITStore, args: argparse.Namespace) -> list[str] | None:
+    """명시 유니버스를 우선 쓰고, 없으면 None (= 자동 탐색으로 폴백)."""
+    if args.tickers:
+        return [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+    if args.tickers_file:
+        tickers = _read_ticker_file(Path(args.tickers_file))
+        print(f"유니버스 파일: {len(tickers)}종목 ({args.tickers_file})")
+        return tickers
+    if args.universe == "store":
+        known = store.known_tickers()
+        if not known:
+            raise SystemExit(
+                "스토어에 티커가 없습니다. 먼저 TICKERS 를 적재하세요:\n"
+                "  opt-factor ingest --store ... --provider csv --kind tickers --csv tickers.csv"
+            )
+        print(f"스토어 유니버스: {len(known)}종목")
+        return known
+    return None
+
+
 def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
     from opt_portfolio.factor.data.sharadar import SharadarProvider
 
-    provider = SharadarProvider(api=args.api)
-    tickers = args.tickers.split(",") if args.tickers else None
+    provider = SharadarProvider(api=args.api, chunk_size=args.chunk)
+    tickers = _resolve_universe(store, args)
     if tickers is None and args.api == "direct":
         # 직판은 무필터 대량조회 시 '최신 N행'만 돌려주므로 유니버스를 먼저
         # 확정하고 티커 청크로 받는다 — 조용한 절단을 구조적으로 차단.
@@ -166,7 +210,10 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
         )
     if not provider.api_key:
         raise SystemExit("API 키가 없습니다. NASDAQ_DATA_LINK_API_KEY 환경변수를 설정하세요.")
-    tables = args.tables.split(",") if args.tables else ["sf1", "sep", "tickers"]
+    # daily 가 빠지면 prices.mcap 이 통째로 비고, 시총 유니버스 필터·EV 팩터·
+    # Black-Litterman 시장가중이 조용히 죽는다 (mcap/ev 의 출처가 DAILY 다).
+    # tickers 는 마지막 — 적재된 종목 기준으로 메타를 청크 조회한다.
+    tables = args.tables.split(",") if args.tables else ["sf1", "sep", "daily", "tickers"]
     for table in tables:
         total = 0
         if table == "sf1":
@@ -356,6 +403,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--since", default=None)
     p.add_argument("--tickers", default=None, help="쉼표 구분 종목 제한 (파일럿용)")
+    p.add_argument(
+        "--tickers-file",
+        default=None,
+        help="유니버스 파일 (TICKERS 벌크 CSV 또는 줄/쉼표 구분 텍스트) — 풀 유니버스 적재용",
+    )
+    p.add_argument(
+        "--universe",
+        default="auto",
+        choices=["auto", "store"],
+        help="auto=최근 분기 재무로 탐색(폐지 종목 누락), store=스토어 tickers 테이블 사용",
+    )
+    p.add_argument(
+        "--chunk",
+        type=int,
+        default=None,
+        help="티커 청크 크기 덮어쓰기 — 기본값은 5년 기준이라 풀 히스토리는 줄여야 한다",
+    )
     p.add_argument("--csv", default=None)
     p.add_argument(
         "--kind",
