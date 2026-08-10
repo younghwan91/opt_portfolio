@@ -43,7 +43,7 @@ def calculate_sharpe_ratio(
     Calculate annualised Sharpe Ratio.
 
     무위험이자율 기본값은 프로젝트 단일 상수(`config.RISK_FREE_RATE`)를 따른다.
-    여기에만 별도 값(2%)이 박혀 있어 risk.py·optimizer.py 와 다른 숫자가 나왔다.
+    risk.py·optimizer.py 와 같은 상수를 봐야 세 모듈의 Sharpe 가 비교 가능하다.
 
     Args:
         returns: Periodic return series (e.g. monthly)

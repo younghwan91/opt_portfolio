@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from ..config import BACKTEST, AllocationConfig
+from ..config import BACKTEST, RISK_FREE_RATE, AllocationConfig
 
 
 @dataclass
@@ -82,7 +82,7 @@ class PortfolioOptimizer:
         weight_min: float = BACKTEST.OPTIMIZATION_WEIGHT_MIN,
         weight_max: float = BACKTEST.OPTIMIZATION_WEIGHT_MAX,
         weight_step: float = BACKTEST.OPTIMIZATION_STEP,
-        risk_free_rate: float = 0.05,
+        risk_free_rate: float = RISK_FREE_RATE,
     ):
         """
         Initialize optimizer.
@@ -91,7 +91,7 @@ class PortfolioOptimizer:
             weight_min: Minimum weight for any asset
             weight_max: Maximum weight for VAA selection
             weight_step: Grid search step size
-            risk_free_rate: Annual risk-free rate for Sharpe calculation
+            risk_free_rate: Annual risk-free rate (default: config.RISK_FREE_RATE)
         """
         self.weight_min = weight_min
         self.weight_max = weight_max

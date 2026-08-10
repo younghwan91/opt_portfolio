@@ -8,6 +8,7 @@ import pytest
 
 from opt_portfolio.analysis.metrics import calculate_sharpe_ratio
 from opt_portfolio.config import RISK_FREE_RATE
+from opt_portfolio.factor.backtest.engine import BacktestResult
 from opt_portfolio.factor.optimize.walkforward import annualized_sharpe
 from opt_portfolio.factor.portfolio.covariance import ledoit_wolf_cc
 from opt_portfolio.factor.portfolio.score import composite_score, rank_normalize
@@ -225,3 +226,18 @@ class TestSharpeConvention:
         assert calculate_sharpe_ratio(returns) == pytest.approx(
             calculate_sharpe_ratio(returns, risk_free_rate=RISK_FREE_RATE)
         )
+
+    def test_backtest_stats_sharpe_matches_walkforward(self) -> None:
+        """`backtest` 와 `optimize` 가 같은 수익률에 같은 Sharpe 를 줘야 한다."""
+        rng = np.random.default_rng(17)
+        idx = pd.date_range("2021-01-01", periods=500, freq="B")
+        returns = pd.Series(rng.normal(0.0006, 0.012, 500), index=idx)
+        result = BacktestResult(
+            returns=returns,
+            equity=(1.0 + returns).cumprod(),
+            holdings=pd.DataFrame(),
+            turnover=pd.Series(dtype=float),
+            exposure=pd.Series(dtype=float),
+        )
+
+        assert result.stats()["sharpe"] == pytest.approx(annualized_sharpe(returns))
