@@ -343,8 +343,7 @@ class DataCache:
             self.save_data(new_data, tickers_to_fetch)
 
             # Retrieve complete dataset from cache
-            complete_data = self.get_data(tickers, start_date, end_date)
-            return complete_data
+            return self.get_data(tickers, start_date, end_date)
 
         except Exception as e:
             logger.error("Error fetching data: %s", e)
@@ -358,7 +357,7 @@ class DataCache:
             DataFrame with cache statistics per ticker
         """
         try:
-            stats = self.conn.execute("""
+            return self.conn.execute("""
                 SELECT 
                     ticker,
                     earliest_date,
@@ -369,7 +368,6 @@ class DataCache:
                 ORDER BY ticker
             """).df()
 
-            return stats
         except Exception as e:
             logger.error("Error getting cache stats: %s", e)
             return pd.DataFrame()

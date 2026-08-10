@@ -217,7 +217,7 @@ def _equity_svg(equity: pd.Series, width: int = 1040, height: int = 260) -> str:
 
     xs = np.linspace(pad_l, width - pad_r, len(eq))
     ys = np.array([_scale(v, lo, hi, height - pad_b, pad_t) for v in log_eq])
-    line = " ".join(f"{x:.1f},{y:.1f}" for x, y in zip(xs, ys))
+    line = " ".join(f"{x:.1f},{y:.1f}" for x, y in zip(xs, ys, strict=True))
 
     # 그리드: 25/50/100% 수익 수준선
     grid_rows = []
@@ -243,7 +243,7 @@ def _equity_svg(equity: pd.Series, width: int = 1040, height: int = 260) -> str:
 
     points = [
         [round(float(x), 1), round(float(y), 1), f"{d.date()}<br><b>{v:.3f}×</b>"]
-        for x, y, d, v in zip(xs, ys, eq.index, eq.to_numpy())
+        for x, y, d, v in zip(xs, ys, eq.index, eq.to_numpy(), strict=True)
     ]
     step = max(1, len(points) // 400)  # 툴팁 데이터 경량화
     return f"""
@@ -273,7 +273,7 @@ def _drawdown_svg(equity: pd.Series, width: int = 1040, height: int = 130) -> st
     top = _scale(0.0, lo, 0.0, height - pad_b, pad_t)
     area = (
         f"M {xs[0]:.1f},{top:.1f} "
-        + " ".join(f"L {x:.1f},{y:.1f}" for x, y in zip(xs, ys))
+        + " ".join(f"L {x:.1f},{y:.1f}" for x, y in zip(xs, ys, strict=True))
         + f" L {xs[-1]:.1f},{top:.1f} Z"
     )
     label_y = _scale(lo, lo, 0.0, height - pad_b, pad_t)
@@ -374,7 +374,7 @@ def _diverging_color(v: float, vmax: float) -> str:
     # 다크에서도 판독 가능하도록 알파 없이 고정 헥스 사용)
     neutral = (240, 239, 236)
     pole = (42, 120, 214) if v >= 0 else (208, 59, 59)
-    rgb = tuple(round(n + (p - n) * t) for n, p in zip(neutral, pole))
+    rgb = tuple(round(n + (p - n) * t) for n, p in zip(neutral, pole, strict=True))
     return f"rgb({rgb[0]},{rgb[1]},{rgb[2]})"
 
 

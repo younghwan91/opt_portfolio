@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from opt_portfolio.config import RISK_FREE_RATE
 from opt_portfolio.factor.backtest.costs import CostModel
 from opt_portfolio.factor.portfolio.weights import compute_weights
 
@@ -52,7 +53,14 @@ class BacktestResult:
     turnover: pd.Series  # 리밸런싱일별 편도 회전율
     exposure: pd.Series  # 적용된 타이밍 익스포저
 
-    def stats(self, periods_per_year: int = 252) -> dict[str, float]:
+    def stats(
+        self, periods_per_year: int = 252, risk_free_rate: float = RISK_FREE_RATE
+    ) -> dict[str, float]:
+        """
+        성과 요약. Sharpe·Sortino 는 `walkforward.annualized_sharpe` 와 같은
+        초과수익 규약(`config.RISK_FREE_RATE` 차감)을 따른다 — 규약이 갈리면
+        `backtest` 와 `optimize` 의 숫자를 나란히 놓을 수 없다.
+        """
         r = self.returns.dropna()
         if len(r) < 2:
             return {}
@@ -60,6 +68,7 @@ class BacktestResult:
         cum = float((1 + r).prod())
         years = len(r) / ann
         vol = float(r.std(ddof=1) * np.sqrt(ann))
+        excess = r - risk_free_rate / ann
         downside = r[r < 0].std(ddof=1) * np.sqrt(ann) if (r < 0).any() else np.nan
         dd = (self.equity / self.equity.cummax() - 1.0).min()
         cagr = cum ** (1 / years) - 1 if years > 0 else np.nan
@@ -67,8 +76,10 @@ class BacktestResult:
             "total_return": cum - 1,
             "cagr": cagr,
             "ann_vol": vol,
-            "sharpe": float(r.mean() / r.std(ddof=1) * np.sqrt(ann)) if vol > 0 else np.nan,
-            "sortino": float(r.mean() * ann / downside) if downside and downside > 0 else np.nan,
+            "sharpe": float(excess.mean() / r.std(ddof=1) * np.sqrt(ann)) if vol > 0 else np.nan,
+            "sortino": (
+                float(excess.mean() * ann / downside) if downside and downside > 0 else np.nan
+            ),
             "max_drawdown": float(dd),
             "calmar": float(cagr / abs(dd)) if dd < 0 else np.nan,
             "avg_turnover": float(self.turnover.mean()),

@@ -496,7 +496,7 @@ def _apply_cross_section(
         return _cross_section_rows(data, how, param)
 
     out = pd.DataFrame(np.nan, index=data.index, columns=data.columns)
-    for label, mask in _group_masks(groups):
+    for _, mask in _group_masks(groups):
         block = data.where(mask)
         out = out.combine_first(_cross_section_rows(block, how, param))
     return out.reindex(index=data.index, columns=data.columns)

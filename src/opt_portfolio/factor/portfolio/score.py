@@ -51,7 +51,7 @@ def composite_score(
     """
     if not panels:
         raise ValueError("합성할 팩터 패널이 없습니다")
-    w = weights or {name: 1.0 for name in panels}
+    w = weights or dict.fromkeys(panels, 1.0)
     total_w = sum(abs(v) for v in w.values())
 
     num: pd.DataFrame | None = None

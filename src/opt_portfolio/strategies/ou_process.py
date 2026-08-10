@@ -83,10 +83,7 @@ class OUForecaster:
         theta = max(min(theta, OU_PROCESS.THETA_MAX), OU_PROCESS.THETA_MIN)
 
         # μ = α / (1 - β)
-        if abs(1 - slope) > 1e-6:
-            mu = intercept / (1 - slope)
-        else:
-            mu = series.mean()
+        mu = intercept / (1 - slope) if abs(1 - slope) > 1e-6 else series.mean()
 
         sigma = np.std(residuals)
 
@@ -124,9 +121,7 @@ class OUForecaster:
         T = months * MOMENTUM.TRADING_DAYS_PER_MONTH
 
         # Analytical solution: E[X_{t+T}] = mu + (X_t - mu) * exp(-theta * T)
-        expected_val = params["mu"] + (current_val - params["mu"]) * np.exp(-params["theta"] * T)
-
-        return expected_val
+        return params["mu"] + (current_val - params["mu"]) * np.exp(-params["theta"] * T)
 
     def forecast_delta(self, series: pd.Series, months: int = 1) -> float:
         """
@@ -263,7 +258,7 @@ class OUForecaster:
             mean_paths[ticker] = np.mean(sim_paths, axis=0)
 
         # Calculate win probabilities
-        wins = {ticker: 0 for ticker in momentum_df.columns}
+        wins = dict.fromkeys(momentum_df.columns, 0)
         valid_tickers = [
             t for t in momentum_df.columns if t in final_scores and len(final_scores[t]) > 0
         ]

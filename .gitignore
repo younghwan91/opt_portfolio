@@ -35,6 +35,3 @@ wheels/
 .vscode/
 *.swp
 *.swo
-
-# 에이전트 툴링 로컬 상태
-.omc/

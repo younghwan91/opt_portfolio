@@ -222,10 +222,7 @@ class PerformanceAnalyzer:
         for start in start_dates:
             # Find corresponding end
             possible_ends = end_dates[end_dates > start]
-            if len(possible_ends) > 0:
-                end = possible_ends[0]
-            else:
-                end = equity_curve.index[-1]
+            end = possible_ends[0] if len(possible_ends) > 0 else equity_curve.index[-1]
 
             # Find trough
             period_dd = drawdown[start:end]
