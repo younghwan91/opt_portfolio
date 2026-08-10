@@ -28,6 +28,7 @@ import pytest
 
 from opt_portfolio.factor.data.sharadar import (
     SharadarProvider,
+    TruncatedDataError,
     _aggregate_insiders,
 )
 
@@ -140,6 +141,31 @@ class TestVendorPayloadTraps:
         provider, _ = _provider([payload])
         frame = next(iter(provider.prices(tickers=["A"])))
         assert frame["close"].astype(float).iloc[0] == 5.0, "원시 close 가 남았다"
+
+
+class TestCursorlessTableTruncation:
+    """
+    TICKERS 는 날짜 커서가 없어 단일 요청으로 받는다 (`_DIRECT_PAGE_COL`).
+
+    무료 티어(500종목)에서는 이 가정이 성립했지만, 유료 플랜은 폐지 종목을
+    포함해 ~18,000종목이라 페이지 한도(10,000)를 넘는다. 커서가 없으니
+    이어받을 수단이 없고, 잘린 유니버스로 적재하면 없는 종목이 백테스트에서
+    조용히 빠진다 — 구독 첫날 터질 절단이다.
+    """
+
+    def test_full_page_without_cursor_raises(self) -> None:
+        payload = {"count": 3, "data": [{"ticker": f"T{i}"} for i in range(3)]}
+        provider, _ = _provider([payload], page_size=3)
+
+        with pytest.raises(TruncatedDataError, match="TICKERS"):
+            provider.tickers()
+
+    def test_partial_page_without_cursor_is_complete(self) -> None:
+        """한도 미만이면 전량을 받은 것이다 — 정상 종료."""
+        payload = {"count": 2, "data": [{"ticker": "A"}, {"ticker": "B"}]}
+        provider, _ = _provider([payload], page_size=3)
+
+        assert len(provider.tickers()) == 2
 
 
 class TestRecordedFixtureDrift:

@@ -231,6 +231,12 @@ class SharadarProvider:
 
         구독 티어마다 유니버스가 다르므로(무료 = S&P500 현재 구성종목) 하드코딩
         대신 최근 분기 재무를 조회해 알아낸다.
+
+        ⚠️ **생존편향 있음 — 유니버스 확정용으로 쓰면 안 된다.**
+        최근 4개 분기 SF1 을 훑는 방식이라 상장폐지 종목은 원리적으로 잡히지
+        않는다. 유료 플랜은 폐지 종목을 포함하므로(2026-08 벤더 확인), 이
+        목록으로 적재하면 폐지 종목을 돈 주고 받아놓고 버리게 된다.
+        전체 유니버스는 TICKERS 벌크 CSV 로 확정하라.
         """
         found: set[str] = set()
         for quarter_back in range(4):
@@ -293,11 +299,11 @@ class SharadarProvider:
             query = dict(params)
             if group:
                 query["ticker"] = ",".join(group)
-            for frame in self._march_forward(url, query, date_col):
+            for frame in self._march_forward(url, query, date_col, table):
                 yield frame.rename(columns=rename)
 
     def _march_forward(
-        self, url: str, params: dict, date_col: str | None
+        self, url: str, params: dict, date_col: str | None, table: str = "?"
     ) -> Iterator[pd.DataFrame]:
         """
         과거 → 최신 방향 페이지네이션.
@@ -324,7 +330,18 @@ class SharadarProvider:
             if frame.empty:
                 return
             yield frame
-            if date_col is None or len(frame) < self.page_size:
+            if date_col is None:
+                # 커서가 없어 이어받을 수단이 없다. 한도만큼 찼다면 뒷부분이
+                # 있는지조차 확인할 수 없으므로 절단으로 간주한다 —
+                # 유료 플랜의 TICKERS(폐지 포함 ~18,000종목)가 여기 걸린다.
+                if len(frame) >= self.page_size:
+                    raise TruncatedDataError(
+                        f"{table} 는 날짜 커서가 없어 단일 요청으로 받는데 응답이 "
+                        f"한도({self.page_size})를 채웠습니다 — 전량이 아닐 수 "
+                        f"있습니다. page_size 를 올리거나 티커 청크로 나눠 요청하세요."
+                    )
+                return
+            if len(frame) < self.page_size:
                 return
             newest = str(pd.to_datetime(frame[date_col]).max().date())
             if newest == from_date:

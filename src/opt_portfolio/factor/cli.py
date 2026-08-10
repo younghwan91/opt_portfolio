@@ -157,6 +157,13 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
         # 확정하고 티커 청크로 받는다 — 조용한 절단을 구조적으로 차단.
         tickers = provider.accessible_tickers()
         print(f"접근 가능 유니버스: {len(tickers)}종목")
+        print(
+            "⚠️  이 유니버스는 최근 분기 재무가 있는 종목만이다 — "
+            "상장폐지 종목은 원리적으로 빠진다.\n"
+            "    유료 플랜의 폐지 종목까지 적재하려면 TICKERS 벌크 CSV 로 "
+            "유니버스를 먼저 확정하고\n"
+            "    `--tickers` 로 명시하라 (`ingest --provider csv --kind tickers`)."
+        )
     if not provider.api_key:
         raise SystemExit("API 키가 없습니다. NASDAQ_DATA_LINK_API_KEY 환경변수를 설정하세요.")
     tables = args.tables.split(",") if args.tables else ["sf1", "sep", "tickers"]
