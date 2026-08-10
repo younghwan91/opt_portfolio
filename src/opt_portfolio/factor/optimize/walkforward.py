@@ -198,7 +198,8 @@ def run_walk_forward(
 
     for k, fold in enumerate(folds):
         result = search(
-            lambda p: objective(evaluate(p, fold.train_start, fold.train_end)),
+            # fold 는 같은 반복 안에서 search() 가 즉시 소비한다 (지연 평가 없음)
+            lambda p: objective(evaluate(p, fold.train_start, fold.train_end)),  # noqa: B023
             space,
             method=method,
             n_trials=n_trials_per_fold,

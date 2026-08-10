@@ -355,7 +355,7 @@ class Portfolio:
 
         # Calculate final allocations
         final_portfolio = {}
-        for ticker, target in target_values.items():
+        for ticker in target_values:
             current_shares = self.positions.get(ticker, Position(ticker, 0)).shares
             if ticker in transactions:
                 if transactions[ticker].action == "BUY":

@@ -104,6 +104,6 @@ def get_color_for_value(
     """
     if value > thresholds[0]:
         return colors[0]
-    elif value < thresholds[1]:
+    if value < thresholds[1]:
         return colors[2]
     return colors[1]

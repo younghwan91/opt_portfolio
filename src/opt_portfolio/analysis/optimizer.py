@@ -295,7 +295,7 @@ class PortfolioOptimizer:
         print("\n📋 Top 5 Weight Combinations:")
         print("-" * 80)
         top5 = results_df.head(5)
-        for i, row in top5.iterrows():
+        for _, row in top5.iterrows():
             print(
                 f"   VAA:{row['VAA'] * 100:4.0f}% SPY:{row['SPY'] * 100:4.0f}% "
                 f"TLT:{row['TLT'] * 100:4.0f}% GLD:{row['GLD'] * 100:4.0f}% "

@@ -379,11 +379,11 @@ class BacktestEngine:
 
         # Initialize results
         results = {}
-        capitals = {s: self.initial_capital for s in strategies}
+        capitals = dict.fromkeys(strategies, self.initial_capital)
         equity_curves = {s: [self.initial_capital] for s in strategies}
         monthly_returns = {s: [] for s in strategies}
         transactions_log = {s: [] for s in strategies}
-        defensive_counts = {s: 0 for s in strategies}
+        defensive_counts = dict.fromkeys(strategies, 0)
         vaa_selections_log = {s: [] for s in strategies}
 
         dates_recorded = []

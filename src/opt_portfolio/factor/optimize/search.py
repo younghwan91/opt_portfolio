@@ -59,10 +59,7 @@ def _encode(params: Params, space: ParamSpace) -> np.ndarray:
     for name, spec in space.items():
         kind, *rest = spec
         v = params[name]
-        if kind == "float":
-            lo, hi = rest
-            x.append((v - lo) / (hi - lo) if hi > lo else 0.5)
-        elif kind == "int":
+        if kind in ("float", "int"):
             lo, hi = rest
             x.append((v - lo) / (hi - lo) if hi > lo else 0.5)
         elif kind == "cat":
@@ -107,7 +104,7 @@ def grid_params(space: ParamSpace, steps: int = 4) -> list[Params]:
         else:
             axes.append(list(rest[0]))
     names = list(space.keys())
-    return [dict(zip(names, combo)) for combo in product(*axes)]
+    return [dict(zip(names, combo, strict=True)) for combo in product(*axes)]
 
 
 # ------------------------------------------------------------------ 탐색기
