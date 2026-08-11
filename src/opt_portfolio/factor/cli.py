@@ -216,11 +216,16 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
     tables = args.tables.split(",") if args.tables else ["sf1", "sep", "daily", "tickers"]
     for table in tables:
         total = 0
+        rescaled = 0
         if table == "sf1":
             for chunk in provider.fundamentals(since=args.since, tickers=tickers):
                 total += store.upsert_fundamentals(chunk)
         elif table == "sep":
             for chunk in provider.prices(since=args.since, tickers=tickers):
+                # 벤더가 분할·배당으로 과거 수정주가를 다시 계산했는지 겹침
+                # 구간에서 확인하고, 그랬다면 저장된 히스토리를 먼저 맞춘다.
+                # 이걸 건너뛰면 경계에 분할 배수만큼 가짜 수익률이 남는다.
+                rescaled += store.rescale_prices(store.detect_adjustment_factors(chunk))
                 total += store.upsert_prices(chunk)
         elif table == "daily":
             for chunk in provider.daily_metrics(since=args.since, tickers=tickers):
@@ -243,6 +248,8 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
         else:
             raise SystemExit(f"알 수 없는 테이블: {table}")
         print(f"{table}: {total}행 적재")
+        if rescaled:
+            print(f"  ↳ 수정주가 소급 재조정으로 기존 {rescaled}행을 함께 맞췄습니다")
     return 0
 
 

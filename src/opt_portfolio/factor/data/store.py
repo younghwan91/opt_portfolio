@@ -159,6 +159,84 @@ class PITStore:
             merge_fields=True,  # SEP(가격)와 DAILY(시총)가 같은 행의 다른 컬럼을 채운다
         )
 
+    # -------------------------------------------------- 수정주가 소급 재조정
+    def detect_adjustment_factors(
+        self, incoming: pd.DataFrame, tol: float = 1e-4
+    ) -> dict[str, float]:
+        """
+        겹치는 날짜의 수정주가 비율 → 종목별 재조정 계수.
+
+        벤더의 `closeadj` 는 분할·배당이 생기면 과거 전체가 다시 계산된다.
+        풀 히스토리를 받아두고 최근 구간만 증분 적재하면, 스토어의 옛 계수
+        구간과 새로 받은 구간 사이 경계에 **가짜 수익률**이 생긴다.
+
+        겹치는 날짜에서 (새 값 / 옛 값) 이 1 이 아니면 재조정이 일어난 것이고,
+        그 비율이 곧 계수다. 비율이 날짜마다 다르면(분할이 아니라 데이터 정정)
+        판단 근거가 없으므로 보고하지 않는다 — 추측으로 과거를 고치지 않는다.
+
+        Returns:
+            {ticker: factor} — 1 에서 유의하게 벗어난 종목만. 겹침이 없으면 제외.
+        """
+        if incoming.empty or "close" not in incoming.columns:
+            return {}
+        new = incoming[["ticker", "date", "close"]].dropna()
+        if new.empty:
+            return {}
+        new = new.assign(date=pd.to_datetime(new["date"]))
+
+        # 들어온 티커·날짜 범위로 좁힌다 — 전체 스캔은 풀 히스토리에서 감당 안 된다
+        names = sorted(set(new["ticker"].astype(str)))
+        placeholders = ",".join("?" * len(names))
+        stored = self.conn.execute(
+            f"SELECT ticker, date, close FROM prices "  # noqa: S608 (placeholders 만 보간)
+            f"WHERE close IS NOT NULL AND ticker IN ({placeholders}) "
+            f"AND date BETWEEN ? AND ?",
+            [*names, new["date"].min().date(), new["date"].max().date()],
+        ).fetch_df()
+        if stored.empty:
+            return {}
+        stored["date"] = pd.to_datetime(stored["date"])
+
+        merged = stored.merge(new, on=["ticker", "date"], suffixes=("_old", "_new"))
+        merged = merged[merged["close_old"] > 0]
+        if merged.empty:
+            return {}
+        merged["ratio"] = merged["close_new"] / merged["close_old"]
+
+        factors: dict[str, float] = {}
+        for ticker, group in merged.groupby("ticker"):
+            ratios = group["ratio"]
+            if ratios.std(ddof=0) > tol:  # 일관된 배수가 아니면 분할이 아니다
+                continue
+            factor = float(ratios.mean())
+            if abs(factor - 1.0) > tol:
+                factors[str(ticker)] = factor
+        return factors
+
+    def rescale_prices(self, factors: dict[str, float]) -> int:
+        """
+        저장된 수정주가에 계수를 곱해 재조정 이전 구간을 새 기준에 맞춘다.
+
+        `close`(=closeadj) 만 대상이다 — `closeunadj`·`open`/`high`/`low` 는
+        벤더가 주는 원시값이라 재조정되지 않는다.
+        """
+        if not factors:
+            return 0
+        total = 0
+        for ticker, factor in factors.items():
+            cur = self.conn.execute(
+                "UPDATE prices SET close = close * ? WHERE ticker = ? AND close IS NOT NULL",
+                [factor, ticker],
+            )
+            row = cur.fetchone() if cur.description else None
+            total += int(row[0]) if row else 0
+            logger.warning(
+                "수정주가 소급 재조정: %s × %.6f — 벤더가 과거를 다시 계산했습니다",
+                ticker,
+                factor,
+            )
+        return total
+
     def upsert_tickers(self, df: pd.DataFrame) -> int:
         return self._upsert(
             "tickers",
