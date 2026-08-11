@@ -124,6 +124,31 @@ class PITStore:
         self.conn.execute(
             f"CREATE TABLE IF NOT EXISTS tickers (ticker VARCHAR NOT NULL, {meta_cols})"
         )
+        # 이벤트 테이블 — 문자열 action 과 수치 value 가 섞여 _upsert 의
+        # 일괄 형변환에 맞지 않으므로 전용 DDL·업서트를 쓴다.
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS actions (
+                ticker VARCHAR,
+                date DATE NOT NULL,
+                action VARCHAR NOT NULL,
+                value DOUBLE,
+                name VARCHAR,
+                contraticker VARCHAR
+            )
+            """
+        )
+        self.conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sp500 (
+                date DATE NOT NULL,
+                action VARCHAR NOT NULL,
+                ticker VARCHAR NOT NULL,
+                name VARCHAR,
+                contraticker VARCHAR
+            )
+            """
+        )
 
     # ---------------------------------------------------------------- 업서트
     def upsert_fundamentals(self, df: pd.DataFrame) -> int:
@@ -158,6 +183,39 @@ class PITStore:
             has_datekey=False,
             merge_fields=True,  # SEP(가격)와 DAILY(시총)가 같은 행의 다른 컬럼을 채운다
         )
+
+    def _upsert_events(self, table: str, df: pd.DataFrame, keys: tuple[str, ...]) -> int:
+        """이벤트 테이블(actions/sp500) 업서트 — 같은 키의 중복은 최초 1건만."""
+        if df.empty:
+            return 0
+        cols = [c for c in ("ticker", "date", "action", "value", "name", "contraticker") if c in df]
+        missing = [k for k in keys if k not in cols]
+        if missing:
+            raise ValueError(f"{table} 업서트에 필수 컬럼 누락: {missing}")
+        frame = df.loc[:, ~df.columns.duplicated()][cols].copy()
+        frame["date"] = pd.to_datetime(frame["date"]).dt.date
+        if "value" in frame:
+            frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
+        frame = frame.drop_duplicates(subset=list(keys), keep="first").reset_index(drop=True)
+
+        self.conn.register("_events", frame)
+        joined = " AND ".join(f't."{k}" = s."{k}"' for k in keys)
+        self.conn.execute(
+            f"DELETE FROM {table} t USING _events s WHERE {joined}"  # noqa: S608
+        )
+        self.conn.execute(
+            f"INSERT INTO {table} ({','.join(cols)}) SELECT {','.join(cols)} FROM _events"  # noqa: S608
+        )
+        self.conn.unregister("_events")
+        return len(frame)
+
+    def upsert_actions(self, df: pd.DataFrame) -> int:
+        """기업 액션 — 분할·배당·상장·폐지. 폐지일이 시점별 유니버스의 근거다."""
+        return self._upsert_events("actions", df, keys=("ticker", "date", "action"))
+
+    def upsert_sp500(self, df: pd.DataFrame) -> int:
+        """S&P500 구성종목 이력 — current/historical/added/removed."""
+        return self._upsert_events("sp500", df, keys=("date", "action", "ticker"))
 
     # -------------------------------------------------- 수정주가 소급 재조정
     def detect_adjustment_factors(

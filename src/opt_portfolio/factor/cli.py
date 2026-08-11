@@ -137,13 +137,12 @@ def _ingest_csv(store: PITStore, args: argparse.Namespace) -> int:
         "institutions": store.upsert_institutions,
         "insiders": store.upsert_insiders,
         "tickers": store.upsert_tickers,
+        "actions": store.upsert_actions,
+        "sp500": store.upsert_sp500,
     }[args.kind]
     total = 0
-    if args.kind == "tickers":
-        total += upsert(pd.read_csv(args.csv))
-    else:
-        for chunk in provider.load_csv(args.csv, args.kind):
-            total += upsert(chunk)
+    for chunk in provider.load_csv(args.csv, args.kind):
+        total += upsert(chunk)
     print(f"{args.kind}: {total}행 적재")
     return 0
 
@@ -236,6 +235,12 @@ def _ingest_sharadar(store: PITStore, args: argparse.Namespace) -> int:
         elif table == "sf2":
             for chunk in provider.insiders(since=args.since, tickers=tickers):
                 total += store.upsert_insiders(chunk)
+        elif table == "actions":
+            for chunk in provider.actions(since=args.since):
+                total += store.upsert_actions(chunk)
+        elif table == "sp500":
+            for chunk in provider.sp500(since=args.since):
+                total += store.upsert_sp500(chunk)
         elif table == "tickers":
             # 메타는 티커 목록을 명시해 청크로 받는다 — 무필터 조회는
             # limit(10,000)에서 잘려 정작 필요한 종목이 빠질 수 있다.
@@ -401,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("ingest", help="데이터 적재")
     p.add_argument("--store", required=True)
     p.add_argument("--provider", choices=["sharadar", "csv"], required=True)
-    p.add_argument("--tables", default=None, help="sf1,sep,daily,sf2,sf3,tickers")
+    p.add_argument("--tables", default=None, help="sf1,sep,daily,sf2,sf3,tickers,actions,sp500")
     p.add_argument(
         "--api",
         default="direct",
@@ -431,7 +436,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--kind",
         default=None,
-        choices=["fundamentals", "prices", "institutions", "insiders", "tickers"],
+        choices=[
+            "fundamentals",
+            "prices",
+            "institutions",
+            "insiders",
+            "tickers",
+            "actions",
+            "sp500",
+        ],
     )
     p.set_defaults(fn=cmd_ingest)
 

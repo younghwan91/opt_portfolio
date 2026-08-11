@@ -143,6 +143,48 @@ class TestVendorPayloadTraps:
         assert frame["close"].astype(float).iloc[0] == 5.0, "원시 close 가 남았다"
 
 
+class TestTickerBatchLimit:
+    """
+    직판은 요청당 티커를 **최대 30개**만 받는다 (2026-08-11 실측).
+
+        {"error":"Too many tickers",
+         "description":"ticker accepts at most 30 tickers per request (got 40)."}
+
+    초판 청크 크기는 SF1=100·SF3A=100·SF2=40 이었고, 전부 400 으로 죽는다.
+    500종목 파일럿에서는 SEP/DAILY(청크 5)만 써서 드러나지 않았다.
+    """
+
+    @pytest.mark.parametrize("table", ["SF1", "SEP", "DAILY", "SF2", "SF3A", "TICKERS"])
+    def test_chunk_size_within_vendor_limit(self, table: str) -> None:
+        from opt_portfolio.factor.data.sharadar import _DIRECT_CHUNK, MAX_TICKERS_PER_REQUEST
+
+        assert _DIRECT_CHUNK[table] <= MAX_TICKERS_PER_REQUEST
+
+    def test_request_never_exceeds_limit(self) -> None:
+        from opt_portfolio.factor.data.sharadar import MAX_TICKERS_PER_REQUEST
+
+        payload = {"count": 1, "data": [{"ticker": "A"}]}
+        provider, calls = _provider([payload] * 40)
+        names = [f"T{i:03d}" for i in range(100)]
+        provider.tickers(tickers=names)
+
+        assert calls, "요청이 나가지 않았다"
+        for params in calls:
+            n = len(params["ticker"].split(","))
+            assert n <= MAX_TICKERS_PER_REQUEST, f"{n}개를 한 번에 요청했다"
+
+    def test_explicit_chunk_override_is_capped(self) -> None:
+        """--chunk 로 과도한 값을 줘도 벤더 한계를 넘지 않는다."""
+        from opt_portfolio.factor.data.sharadar import MAX_TICKERS_PER_REQUEST
+
+        payload = {"count": 1, "data": [{"ticker": "A"}]}
+        provider, calls = _provider([payload] * 40, chunk_size=500)
+        provider.tickers(tickers=[f"T{i:03d}" for i in range(100)])
+
+        for params in calls:
+            assert len(params["ticker"].split(",")) <= MAX_TICKERS_PER_REQUEST
+
+
 class TestCursorlessTableTruncation:
     """
     TICKERS 는 날짜 커서가 없어 단일 요청으로 받는다 (`_DIRECT_PAGE_COL`).

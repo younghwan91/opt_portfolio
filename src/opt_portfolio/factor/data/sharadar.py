@@ -51,7 +51,14 @@ _DIRECT_TABLES = {
     "SF2": "sf2",
     "SF3A": "sf3a",
     "TICKERS": "tickers",
+    "ACTIONS": "actions",
+    "SP500": "sp500",
 }
+
+#: 이벤트 테이블의 히스토리 시작점. 무필터 요청은 `from` 이 없으면 **최신 N행**을
+#: 돌려주므로(함정 4번), 전량 수집에는 항상 이 값을 넘긴다. 2026-08-11 실측:
+#: from 을 주면 무필터에서도 sort=date.asc 가 정상 동작한다.
+_EVENT_EPOCH = "1990-01-01"
 
 #: 직판 윈도잉 페이지네이션의 정렬/커서 기준 날짜 컬럼.
 #: 직판 API 는 모든 테이블의 기준 날짜 컬럼명을 'date' 로 통일했다
@@ -63,6 +70,8 @@ _DIRECT_PAGE_COL: dict[str, str | None] = {
     "SF2": "date",
     "SF3A": "date",
     "TICKERS": None,  # 소형 테이블 — 단일 요청
+    "ACTIONS": "date",
+    "SP500": "date",
 }
 
 #: 직판 응답의 'date' → NDL/스토어 표준 컬럼명 복원 (실응답으로 검증)
@@ -72,9 +81,14 @@ _DIRECT_RENAME: dict[str, dict[str, str]] = {
     "SF3A": {"date": "calendardate"},
 }
 
-#: 테이블별 티커 청크 크기 — 요청당 행수를 페이지 한도 아래로 유지한다.
-#: (SEP 는 티커당 5년 ≈ 1,260행이므로 5개씩; 분기 테이블은 티커당 ~20행)
-_DIRECT_CHUNK = {"SEP": 5, "DAILY": 5, "SF1": 100, "SF3A": 100, "SF2": 40, "TICKERS": 200}
+#: 요청당 티커 개수 상한 — **벤더 하드 리밋** (2026-08-11 실측).
+#: 초과 시 400 {"error":"Too many tickers","description":"ticker accepts at most
+#: 30 tickers per request"}. 청크 크기는 이 값을 절대 넘을 수 없다.
+MAX_TICKERS_PER_REQUEST = 30
+
+#: 테이블별 티커 청크 크기 — 요청당 행수를 페이지 한도 아래로 유지하되,
+#: 위 벤더 리밋을 넘지 않는다. (SEP 는 티커당 5년 ≈ 1,260행이므로 5개씩)
+_DIRECT_CHUNK = {"SEP": 5, "DAILY": 5, "SF1": 30, "SF3A": 30, "SF2": 30, "TICKERS": 30}
 
 #: 13F 집계(SF3A) 벤더 컬럼 → 표준 필드
 _SF3A_RENAME = {"shrunits": "inst_shares", "shrholders": "inst_holders"}
@@ -215,6 +229,26 @@ class SharadarProvider:
         for chunk in self._paginate("SF2", params, tickers):
             yield _aggregate_insiders(chunk)
 
+    def actions(self, since: str | None = None) -> Iterator[pd.DataFrame]:
+        """
+        기업 액션 — split / dividend / listed / delisted / spinoff (2026-08-11 실측).
+
+        폐지일(delisted)이 **시점별 유니버스**의 근거이고, split 의 `value` 가
+        수정주가 소급 재조정의 독립 검증 수단이다. 티커 필터 없이 전량을 받되
+        `from` 을 반드시 넘긴다 — 없으면 최신 N행만 온다.
+        """
+        yield from self._paginate("ACTIONS", {"from": since or _EVENT_EPOCH})
+
+    def sp500(self, since: str | None = None) -> Iterator[pd.DataFrame]:
+        """
+        S&P500 구성종목 이력 — current / historical / added / removed (실측).
+
+        `historical` 은 과거 시점의 구성종목 스냅샷이다. 2012-12-31 조회에
+        YHOO 가 들어 있는 것을 확인했다 — 즉 편출 종목이 보존돼 있고,
+        '당시 지수 편입 종목' 유니버스를 재구성할 수 있다.
+        """
+        yield from self._paginate("SP500", {"from": since or _EVENT_EPOCH})
+
     def tickers(self, tickers: list[str] | None = None) -> pd.DataFrame:
         # NDL 은 table=SF1 필터가 필요하지만, 직판은 이 필터에 빈 결과를
         # 반환한다 (table 컬럼 값 체계가 다름 — 실적재에서 확인)
@@ -268,6 +302,10 @@ class SharadarProvider:
             "prices": lambda df: iter([normalize_columns(_drop_raw_close(df), "sharadar")]),
             "institutions": lambda df: iter([_csv_institutions(df)]),
             "insiders": lambda df: iter([_aggregate_insiders(df)]),
+            # 이벤트 테이블은 벤더 컬럼명이 이미 표준형이라 그대로 통과시킨다
+            "actions": lambda df: iter([df]),
+            "sp500": lambda df: iter([df]),
+            "tickers": lambda df: iter([_csv_tickers(df)]),
         }
         if kind not in readers:
             raise ValueError(f"알 수 없는 CSV 종류 '{kind}'. 지원: {sorted(readers)}")
@@ -293,7 +331,8 @@ class SharadarProvider:
         rename = _DIRECT_RENAME.get(table, {})
 
         if tickers:
-            size = self.chunk_size or _DIRECT_CHUNK.get(table, 50)
+            # 벤더 하드 리밋을 넘는 값은 조용히 400 이 되므로 여기서 자른다
+            size = min(self.chunk_size or _DIRECT_CHUNK.get(table, 30), MAX_TICKERS_PER_REQUEST)
             groups: list[list[str] | None] = [
                 tickers[i : i + size] for i in range(0, len(tickers), size)
             ]
@@ -439,6 +478,20 @@ def _csv_fundamentals(df: pd.DataFrame) -> pd.DataFrame:
     frame = normalize_columns(frame, "sharadar")
     validate_pit_frame(frame)
     return frame
+
+
+def _csv_tickers(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    TICKERS 벌크 CSV → 정규화 메타.
+
+    CSV 는 `isdelisted`, 스토어는 `is_delisted` 를 쓴다. API 경로만 리네임하고
+    있어서 벌크로 적재하면 폐지 여부가 통째로 NULL 이 된다 — 폐지 종목을 사놓고
+    어느 것이 폐지됐는지 모르게 되므로, 생존편향 제거가 여기서 무산된다.
+    """
+    out = normalize_columns(df, "sharadar")
+    if "isdelisted" in out.columns and "is_delisted" not in out.columns:
+        out = out.rename(columns={"isdelisted": "is_delisted"})
+    return out
 
 
 def _csv_institutions(df: pd.DataFrame) -> pd.DataFrame:
