@@ -14,6 +14,19 @@ wheels/
 *.db
 *.duckdb
 
+# 벤더 데이터 — 이 저장소는 PUBLIC 이다. Sharadar 데이터는 유료 구독물이며
+# 재배포 대상이 아니므로, 실수로 커밋되지 않게 경로 단위로 막는다.
+*.csv
+*.csv.gz
+*.zip
+tests/factor/fixtures/sharadar/
+!configs/*.csv
+
+# API 키
+.env
+.env.*
+*.key
+
 # Coverage
 htmlcov/
 .coverage
