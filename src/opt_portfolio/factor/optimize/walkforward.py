@@ -21,6 +21,7 @@ Walk-Forward 파라미터 최적화 — 이 시스템에서 PO 의 유일한 공
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -38,6 +39,8 @@ from opt_portfolio.factor.research.overfitting import deflated_sharpe_ratio
 
 #: evaluate(params, start, end) → 해당 구간의 일별 수익률
 Evaluator = Callable[[Params, pd.Timestamp, pd.Timestamp], pd.Series]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -208,6 +211,16 @@ def run_walk_forward(
         searches.append(result)
         chosen.append(result.best_params)
         oos_parts.append(evaluate(result.best_params, fold.test_start, fold.test_end))
+        # 폴드 단위 진행 로그 — 풀 히스토리에서는 한 번 돌리는 데 시간 단위가
+        # 걸린다. 진행률이 없으면 멈춘 것인지 도는 중인지 구분할 수 없다.
+        logger.info(
+            "폴드 %d/%d 완료 — test %s~%s, 최적 %s",
+            k + 1,
+            len(folds),
+            fold.test_start.date(),
+            fold.test_end.date(),
+            result.best_params,
+        )
 
     oos = pd.concat(oos_parts).sort_index()
     oos = oos[~oos.index.duplicated(keep="first")]

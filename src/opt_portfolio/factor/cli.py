@@ -139,10 +139,21 @@ def _ingest_csv(store: PITStore, args: argparse.Namespace) -> int:
         "tickers": store.upsert_tickers,
         "actions": store.upsert_actions,
         "sp500": store.upsert_sp500,
+        "daily": store.upsert_prices,
     }[args.kind]
-    total = 0
+    # 벌크 CSV 는 전체 유니버스(~18,000종목)다. 유니버스를 지정하면 적재
+    # 단계에서 걸러 스토어와 적재 시간을 필요한 만큼만 쓴다.
+    wanted = _resolve_universe(store, args)
+    keep = set(wanted) if wanted else None
+    total = skipped = 0
     for chunk in provider.load_csv(args.csv, args.kind):
+        if keep is not None and "ticker" in chunk.columns:
+            before = len(chunk)
+            chunk = chunk[chunk["ticker"].astype(str).str.upper().isin(keep)]
+            skipped += before - len(chunk)
         total += upsert(chunk)
+    if skipped:
+        print(f"  ↳ 유니버스 밖 {skipped}행 제외")
     print(f"{args.kind}: {total}행 적재")
     return 0
 
@@ -444,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             "tickers",
             "actions",
             "sp500",
+            "daily",
         ],
     )
     p.set_defaults(fn=cmd_ingest)

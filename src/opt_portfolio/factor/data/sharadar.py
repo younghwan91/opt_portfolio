@@ -306,6 +306,7 @@ class SharadarProvider:
             "actions": lambda df: iter([df]),
             "sp500": lambda df: iter([df]),
             "tickers": lambda df: iter([_csv_tickers(df)]),
+            "daily": lambda df: iter([_csv_daily(df)]),
         }
         if kind not in readers:
             raise ValueError(f"알 수 없는 CSV 종류 '{kind}'. 지원: {sorted(readers)}")
@@ -477,6 +478,21 @@ def _csv_fundamentals(df: pd.DataFrame) -> pd.DataFrame:
     frame = df[df.get("dimension", DEFAULT_DIMENSION) == DEFAULT_DIMENSION]
     frame = normalize_columns(frame, "sharadar")
     validate_pit_frame(frame)
+    return frame
+
+
+def _csv_daily(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    DAILY 벌크 CSV → 정규화.
+
+    API 경로(`daily_metrics`)와 **같은 백만 달러 → 달러 환산**을 적용한다.
+    이게 빠지면 mcap/ev 가 10⁶배 작아져 PER·EV 배수가 전부 틀어지고,
+    시총 유니버스 필터가 모든 종목을 소형주로 오인한다.
+    """
+    frame = normalize_columns(df, "sharadar")
+    for col in ("mcap", "ev"):
+        if col in frame.columns:
+            frame[col] = pd.to_numeric(frame[col], errors="coerce") * 1e6
     return frame
 
 
