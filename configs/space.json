@@ -1,6 +1,6 @@
 {
   "n_stocks": ["int", 15, 50],
   "rebalance": ["cat", ["ME", "QE"]],
-  "weighting": ["cat", ["equal", "inverse_vol", "risk_parity", "hrp"]],
+  "weighting": ["cat", ["equal", "inverse_vol"]],
   "max_weight": ["float", 0.04, 0.15]
 }
