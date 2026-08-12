@@ -280,6 +280,11 @@ def _pipeline(args: argparse.Namespace) -> tuple[FactorPipeline, StrategyConfig]
     tickers = _read_ticker_file(Path(args.tickers_file)) if args.tickers_file else None
     if tickers:
         print(f"후보 유니버스: {len(tickers)}종목 ({args.tickers_file})")
+        # 벤치마크는 유니버스 밖이라도 반드시 싣는다 — 마켓타이밍·베타 팩터가
+        # 이걸 쓴다. 유니버스 파일에 SPY 를 넣어야 한다는 것을 사용자가
+        # 기억하게 만드는 설계는 틀렸다.
+        if config.benchmark and config.benchmark not in tickers:
+            tickers = [*tickers, config.benchmark]
     with _open_existing(args.store) as store:
         ctx = store.build_context(
             start=args.start, end=args.end, tickers=tickers, benchmark=config.benchmark
@@ -394,6 +399,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         n_trials_per_fold=args.trials,
         min_train_years=args.min_train_years,
         embargo_days=args.embargo,
+        train_window_years=args.train_window,
     )
     print(f"폴드 수:          {len(result.folds)}")
     print(f"총 시도:          {result.n_trials_total}")
@@ -500,6 +506,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--trials", type=int, default=24)
     p.add_argument("--min-train-years", type=float, default=5.0)
     p.add_argument("--embargo", type=int, default=21)
+    p.add_argument(
+        "--train-window",
+        type=float,
+        default=None,
+        help="롤링 윈도 학습 — 직전 N년만 학습한다 (미지정 시 확장 윈도)",
+    )
     p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
     p.add_argument("--objective", default="sharpe", choices=["sharpe", "calmar"])
     p.add_argument("--start", default=None)
