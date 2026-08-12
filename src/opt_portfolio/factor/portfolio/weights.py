@@ -81,6 +81,28 @@ def equal_weight(names: pd.Index) -> pd.Series:
     return pd.Series(1.0 / len(names), index=names)
 
 
+def value_weight(names: pd.Index, market_caps: pd.Series | None) -> pd.Series:
+    """
+    시총가중 — Hou·Xue·Zhang(2020)이 아노말리 검증의 표준으로 요구하는 방식.
+
+    균등가중은 소형주에 사실상 레버리지를 거는 것과 같아 호가 스프레드 반동으로
+    수익이 부풀려진다. HXZ 는 이 하나를 바꾸는 것만으로 452개 아노말리의 65%가
+    유의성을 잃는다고 보고한다. '균등가중에서만 사는 결과'를 걸러내는 장치다.
+
+    시총이 없으면(초기 히스토리) 균등가중으로 후퇴한다 — 조용히 0 을 주면
+    그 종목이 포트폴리오에서 사라진다.
+    """
+    if market_caps is None:
+        return equal_weight(names)
+    caps = pd.to_numeric(market_caps.reindex(names), errors="coerce")
+    caps = caps.where(caps > 0)
+    if caps.notna().sum() == 0:
+        return equal_weight(names)
+    # 시총 결측 종목은 관측된 것들의 중앙값으로 채운다 (탈락시키지 않는다)
+    caps = caps.fillna(caps.median())
+    return caps / caps.sum()
+
+
 def inverse_vol(returns: pd.DataFrame) -> pd.Series:
     vol = returns.std(ddof=1)
     inv = 1.0 / vol.where(vol > 0)
@@ -269,7 +291,9 @@ def _solve_mvo(
 
 WeightFn = Callable[..., pd.Series]
 
-SCHEMES = frozenset({"equal", "inverse_vol", "risk_parity", "hrp", "mvo", "black_litterman"})
+SCHEMES = frozenset(
+    {"equal", "value", "inverse_vol", "risk_parity", "hrp", "mvo", "black_litterman"}
+)
 
 
 def compute_weights(
@@ -292,6 +316,8 @@ def compute_weights(
 
     if scheme == "equal":
         w = equal_weight(returns.columns)
+    elif scheme == "value":
+        w = value_weight(returns.columns, market_caps)
     elif scheme == "inverse_vol":
         w = inverse_vol(returns)
     elif scheme == "risk_parity":

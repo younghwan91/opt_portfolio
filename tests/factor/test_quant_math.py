@@ -322,3 +322,53 @@ class TestDeflatedSharpeUnits:
         result = self._result([0.02, 0.03, 0.04, 0.05])
 
         assert result.deflated_sharpe() > 0.5, "단위 오류로 DSR 이 0 에 붙었다"
+
+
+class TestValueWeighting:
+    """
+    시총가중 — Hou·Xue·Zhang(2020)이 아노말리 검증의 표준으로 요구하는 방식.
+
+    균등가중은 소형주에 사실상 레버리지를 거는 것과 같아, 호가 스프레드
+    반동으로 수익이 부풀려진다. HXZ 는 이 하나를 바꾸는 것만으로 452개
+    아노말리의 65%가 유의성을 잃는다고 보고한다. 균등가중에서만 살아남는
+    결과는 신뢰할 수 없으므로 엔진이 이 검증을 지원해야 한다.
+    """
+
+    def test_weights_follow_market_cap(self) -> None:
+        from opt_portfolio.factor.portfolio.weights import compute_weights
+
+        rets = pd.DataFrame(RNG.normal(0, 0.02, (300, 3)), columns=["BIG", "MID", "SMALL"])
+        caps = pd.Series({"BIG": 900e9, "MID": 100e9, "SMALL": 10e9})
+
+        w = compute_weights(
+            "value", rets, pd.Series(0.0, index=rets.columns), market_caps=caps, max_weight=1.0
+        )
+
+        assert w["BIG"] > w["MID"] > w["SMALL"]
+        assert w.sum() == pytest.approx(1.0)
+
+    def test_cap_limits_mega_cap_dominance(self) -> None:
+        """상한이 없으면 초대형주 하나가 포트폴리오를 삼킨다."""
+        from opt_portfolio.factor.portfolio.weights import compute_weights
+
+        rets = pd.DataFrame(RNG.normal(0, 0.02, (300, 3)), columns=["BIG", "MID", "SMALL"])
+        caps = pd.Series({"BIG": 9000e9, "MID": 100e9, "SMALL": 10e9})
+
+        w = compute_weights(
+            "value", rets, pd.Series(0.0, index=rets.columns), market_caps=caps, max_weight=0.5
+        )
+
+        assert w["BIG"] <= 0.5 + 1e-9
+
+    def test_missing_caps_fall_back_to_equal(self) -> None:
+        """시총이 없는 구간(초기 히스토리)에서 조용히 0 이 되면 안 된다."""
+        from opt_portfolio.factor.portfolio.weights import compute_weights
+
+        rets = pd.DataFrame(RNG.normal(0, 0.02, (300, 3)), columns=["A", "B", "C"])
+
+        w = compute_weights(
+            "value", rets, pd.Series(0.0, index=rets.columns), market_caps=None, max_weight=1.0
+        )
+
+        assert w.sum() == pytest.approx(1.0)
+        assert w.std() == pytest.approx(0.0, abs=1e-9)
