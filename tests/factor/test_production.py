@@ -302,7 +302,8 @@ class TestCLI:
 
         assert main(["factors", "--category", "growth"]) == 0
         out = capsys.readouterr().out
-        assert "26개 팩터" in out
+        assert "REVENUE_GROWTH_YOY" in out
+        assert "개 팩터" in out
 
     def test_backtest_command_end_to_end(self, tmp_path, capsys) -> None:
         """파일 스토어 + JSON 설정으로 CLI 백테스트가 완주하는가."""

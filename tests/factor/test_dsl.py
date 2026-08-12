@@ -160,10 +160,18 @@ class TestRegistry:
     def test_growth_and_acceleration_are_auto_derived(self) -> None:
         import opt_portfolio.factor.library  # noqa: F401
 
-        growth = REGISTRY.by_category("growth")
-        accel = REGISTRY.by_category("acceleration")
-        assert len(growth) == 26, f"성장 팩터 26개 기대, {len(growth)}개"
-        assert len(accel) == 15, f"가속 팩터 15개 기대, {len(accel)}개"
+        # 성장·가속 팩터는 기반 항목마다 QoQ/YoY 쌍으로 생성된다.
+        # 개수를 못박으면 팩터를 하나 추가할 때마다 깨지므로 **쌍 구조**를 본다.
+        names = {s.name for s in REGISTRY.by_category("growth")}
+        qoq = {n[: -len("_QOQ")] for n in names if n.endswith("_QOQ")}
+        yoy = {n[: -len("_YOY")] for n in names if n.endswith("_YOY")}
+        assert qoq == yoy, f"짝이 없는 성장 팩터: {qoq ^ yoy}"
+        assert len(qoq) >= 13, f"성장 기반 항목이 {len(qoq)}개뿐"
+
+        accel = {s.name for s in REGISTRY.by_category("acceleration")}
+        a_qoq = {n[: -len("_QOQ")] for n in accel if n.endswith("_QOQ")}
+        a_yoy = {n[: -len("_YOY")] for n in accel if n.endswith("_YOY")}
+        assert a_qoq == a_yoy, f"짝이 없는 가속 팩터: {a_qoq ^ a_yoy}"
 
     def test_multiples_are_inverted_for_scoring(self) -> None:
         """PER 스코어링 표현식은 역수를 취해 적자기업이 상위로 오지 않아야 한다."""

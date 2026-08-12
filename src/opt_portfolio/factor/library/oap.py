@@ -140,7 +140,7 @@ GR_CAPX = factor(
 CH_EQUITY = factor(
     "CH_EQUITY",
     F.equity / F.equity.lag(_YEAR),
-    category="growth",
+    category="quality",
     label="자기자본 성장",
     direction=-1,
     notes="Lockwood & Prombutr 2010 JFR, OAP t=5.38",
