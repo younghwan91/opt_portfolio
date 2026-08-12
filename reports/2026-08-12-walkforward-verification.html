@@ -1,0 +1,428 @@
+<title>US 팩터 전략 — Walk-Forward 검증 보고서</title>
+<style>
+:root{
+  --ground:#F7F8FA; --panel:#FFFFFF; --ink:#101419; --ink-2:#3D4753; --ink-3:#6B7684;
+  --rule:#DCE1E8; --rule-2:#EEF1F5;
+  --brass:#8A6A22; --fail:#9C3A31; --hold:#5A6472;
+  --s1:#2F5D9E; --s2:#B0842B; --s1-soft:rgba(47,93,158,.12); --s2-soft:rgba(176,132,43,.12);
+  --shadow:0 1px 2px rgba(16,20,25,.06), 0 8px 24px -16px rgba(16,20,25,.25);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#12161C; --panel:#171C24; --ink:#E5E9EF; --ink-2:#BAC3CF; --ink-3:#8B97A6;
+    --rule:#242C37; --rule-2:#1D242D;
+    --brass:#C79A38; --fail:#D1685C; --hold:#93A0B0;
+    --s1:#4E86CC; --s2:#B0842B; --s1-soft:rgba(78,134,204,.16); --s2-soft:rgba(176,132,43,.16);
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#12161C; --panel:#171C24; --ink:#E5E9EF; --ink-2:#BAC3CF; --ink-3:#8B97A6;
+  --rule:#242C37; --rule-2:#1D242D;
+  --brass:#C79A38; --fail:#D1685C; --hold:#93A0B0;
+  --s1:#4E86CC; --s2:#B0842B; --s1-soft:rgba(78,134,204,.16); --s2-soft:rgba(176,132,43,.16);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:Georgia,"Times New Roman",serif; font-size:17px; line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:clamp(28px,5vw,72px) clamp(18px,4vw,40px) 96px}
+.col{max-width:68ch}
+
+h1,h2,h3,.eyebrow,.mono,th,.tag,.legend,.axis{
+  font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+.mono,.num,td.n,th.n,.tag{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-variant-numeric:tabular-nums}
+
+.eyebrow{
+  font-size:12px; font-weight:650; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--brass); margin:0 0 14px
+}
+h1{font-size:clamp(30px,4.6vw,46px); line-height:1.12; letter-spacing:-.022em; font-weight:760; margin:0 0 18px; text-wrap:balance}
+h2{font-size:clamp(20px,2.6vw,25px); line-height:1.25; letter-spacing:-.012em; font-weight:700; margin:0 0 14px; text-wrap:balance}
+h3{font-size:16px; letter-spacing:.01em; font-weight:680; margin:0 0 8px}
+p{margin:0 0 17px}
+strong{font-weight:700; color:var(--ink)}
+a{color:var(--s1)}
+
+.deck{font-size:19px; line-height:1.66; color:var(--ink-2); margin:0 0 26px}
+.meta{
+  display:flex; flex-wrap:wrap; gap:8px 22px; font-size:12.5px; letter-spacing:.02em;
+  color:var(--ink-3); padding-top:16px; border-top:1px solid var(--rule);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace
+}
+
+section{margin-top:clamp(40px,6vw,68px)}
+.sec-head{display:flex; align-items:baseline; gap:14px; margin-bottom:20px; border-bottom:1px solid var(--rule); padding-bottom:12px}
+.sec-head h2{margin:0}
+.sec-num{font-family:ui-monospace,monospace; font-size:12px; color:var(--ink-3); letter-spacing:.08em}
+
+/* 판정 패널 */
+.verdict{
+  background:var(--panel); border:1px solid var(--rule); border-radius:3px;
+  box-shadow:var(--shadow); padding:clamp(20px,3vw,30px); margin:30px 0 0;
+  display:grid; gap:22px; grid-template-columns:minmax(0,1fr);
+}
+@media(min-width:760px){ .verdict{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)} }
+.verdict-label{font-size:11.5px; font-weight:650; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); margin:0 0 10px}
+.verdict-call{font-family:ui-sans-serif,system-ui,sans-serif; font-size:clamp(24px,3.4vw,32px); font-weight:740; letter-spacing:-.015em; line-height:1.2; color:var(--fail); margin:0 0 10px}
+.verdict p{font-size:15.5px; line-height:1.6; color:var(--ink-2); margin:0}
+.dsr-grid{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--rule); border:1px solid var(--rule); border-radius:2px; overflow:hidden}
+.dsr-cell{background:var(--panel); padding:16px 14px}
+.dsr-cell .k{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); font-family:ui-sans-serif,system-ui,sans-serif; margin:0 0 6px}
+.dsr-cell .v{font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums; font-size:26px; font-weight:600; line-height:1; color:var(--ink)}
+.dsr-cell .v.bad{color:var(--fail)}
+.dsr-cell .s{font-size:12px; color:var(--ink-3); margin-top:6px; font-family:ui-sans-serif,system-ui,sans-serif}
+
+/* 표 */
+.tablewrap{overflow-x:auto; margin:22px 0; border:1px solid var(--rule); border-radius:3px; background:var(--panel)}
+table{border-collapse:collapse; width:100%; font-size:14px}
+caption{text-align:left; font-size:12.5px; color:var(--ink-3); padding:12px 14px 0; font-family:ui-sans-serif,system-ui,sans-serif}
+th,td{padding:9px 14px; text-align:left; border-bottom:1px solid var(--rule-2); white-space:nowrap}
+thead th{font-size:11.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-3); font-weight:650; border-bottom:1px solid var(--rule)}
+tbody tr:last-child td{border-bottom:none}
+td.n,th.n{text-align:right}
+.pos{color:var(--s1)} .neg{color:var(--fail)}
+tr.hl td{background:var(--s2-soft)}
+
+.tag{display:inline-block; font-size:11px; letter-spacing:.04em; padding:2px 7px; border-radius:2px; border:1px solid var(--rule); color:var(--ink-3)}
+.tag.ok{color:var(--s1); border-color:var(--s1)}
+.tag.no{color:var(--fail); border-color:var(--fail)}
+
+/* 차트 */
+figure{margin:26px 0 0}
+.chart-card{background:var(--panel); border:1px solid var(--rule); border-radius:3px; padding:18px 16px 10px}
+.legend{display:flex; gap:18px; flex-wrap:wrap; font-size:13px; color:var(--ink-2); margin:0 0 4px 4px}
+.legend span{display:inline-flex; align-items:center; gap:7px}
+.swatch{width:14px; height:3px; border-radius:2px; display:inline-block}
+figcaption{font-size:13px; color:var(--ink-3); margin-top:12px; line-height:1.55}
+svg{display:block; width:100%; height:auto; overflow:visible}
+.axis{font-size:11px; fill:var(--ink-3); font-family:ui-sans-serif,system-ui,sans-serif}
+.gridline{stroke:var(--rule-2)}
+.tipbox{position:absolute; pointer-events:none; background:var(--panel); border:1px solid var(--rule); border-radius:3px; padding:8px 10px; font-family:ui-monospace,monospace; font-size:12px; line-height:1.5; box-shadow:var(--shadow); opacity:0; transition:opacity .12s; white-space:nowrap; color:var(--ink)}
+.chart-host{position:relative}
+
+blockquote{margin:22px 0; padding:2px 0 2px 18px; border-left:2px solid var(--brass); color:var(--ink-2); font-size:16px}
+ul{margin:0 0 17px; padding-left:20px} li{margin-bottom:7px}
+.footnote{font-size:13.5px; color:var(--ink-3); line-height:1.6}
+hr{border:0; border-top:1px solid var(--rule); margin:44px 0}
+:focus-visible{outline:2px solid var(--brass); outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="col">
+  <p class="eyebrow">Walk-Forward 검증 · 내부 보고</p>
+  <h1>미국 주식 팩터 전략은 두 유니버스 모두에서 채택 기준을 넘지 못했다</h1>
+  <p class="deck">생존편향을 제거한 28년 데이터로 두 개의 유니버스를 검증했다.
+  둘 다 양(+)의 아웃오브샘플 수익을 냈지만, 시도 횟수를 정산한 Deflated Sharpe 는 두 경우 모두 0 이다.
+  즉 <strong>이 수익은 우연히 얻어질 수 있는 크기</strong>이며, 실전 자금을 넣을 근거가 되지 못한다.</p>
+  <div class="meta">
+    <span>작성 2026-08-12</span>
+    <span>데이터 Sharadar · 1997-12-31 ~ 2026-08-10</span>
+    <span>가격 46,301,311행 / 21,962종목</span>
+  </div>
+</header>
+
+<div class="verdict">
+  <div>
+    <p class="verdict-label">판정</p>
+    <p class="verdict-call">채택 불가 — 두 유니버스 모두</p>
+    <p>Deflated Sharpe Ratio 는 “같은 데이터에서 N 번 시도했을 때 순수한 노이즈만으로 기대되는 최대 Sharpe”를 빼고 남는 값이다.
+    A안은 228회, B안은 136회 시도했고, 그 정산 결과 두 전략 모두 <strong>0.000</strong> 이 나왔다.
+    관문은 0.95 다.</p>
+  </div>
+  <div class="dsr-grid">
+    <div class="dsr-cell">
+      <p class="k">A · 역대 S&amp;P500</p>
+      <div class="v">0.397</div>
+      <div class="s">OOS Sharpe · 18.6년</div>
+    </div>
+    <div class="dsr-cell">
+      <p class="k">A · Deflated</p>
+      <div class="v bad">0.000</div>
+      <div class="s">관문 0.95 미달</div>
+    </div>
+    <div class="dsr-cell">
+      <p class="k">B · 마이크로캡</p>
+      <div class="v">0.186</div>
+      <div class="s">OOS Sharpe · 16.6년</div>
+    </div>
+    <div class="dsr-cell">
+      <p class="k">B · Deflated</p>
+      <div class="v bad">0.000</div>
+      <div class="s">관문 0.95 미달</div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="sec-head"><span class="sec-num">01</span><h2>무엇을 검증했는가</h2></div>
+  <div class="col">
+    <p>두 개의 유니버스를 같은 팩터 조합·같은 프로토콜로 검증했다. 두 번째 유니버스는
+    “기관이 구조적으로 들어올 수 없는 구간에 초과수익이 남아 있다”는 가설을 겨냥한 것이다.</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <caption>검증 대상 두 전략</caption>
+      <thead><tr><th>구분</th><th>A · 역대 S&amp;P500</th><th>B · 마이크로캡</th></tr></thead>
+      <tbody>
+        <tr><td>유니버스 정의</td><td>지수에 한 번이라도 편입된 전 종목</td><td>시총 $100M–$1B · 일 거래대금 ≥ $1M</td></tr>
+        <tr><td class="n" style="text-align:left">후보 종목</td><td class="n">1,191</td><td class="n">2,654</td></tr>
+        <tr><td>가설</td><td>대형주 팩터 프리미엄</td><td>기관 접근 불가 구간의 소외 프리미엄</td></tr>
+        <tr><td>슬리피지 가정</td><td class="n">10bp</td><td class="n">40bp</td></tr>
+        <tr><td>리밸런싱</td><td>월말 / 분기말 (탐색)</td><td>월말 / 분기말 (탐색)</td></tr>
+        <tr><td>보유 종목수</td><td class="n">15–50 (탐색)</td><td class="n">15–50 (탐색)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col">
+    <p><strong>생존편향은 실제로 제거됐다.</strong> 상장폐지된 종목이 데이터에 남아 있는지 직접 확인했다 —
+    엔론(ENRNQ, 2004-11 폐지), 구 아메리칸항공(AAMRQ, 2013-12), 암박(ABKFQ, 2010-11)의 가격·재무가
+    폐지 시점까지 그대로 들어 있다. 기업 액션 테이블에는 폐지 19,227건, 분할 12,916건이 1997년부터 기록돼 있다.
+    “지금 살아남은 종목만 보고 과거를 재구성하는” 오류는 이 검증에 없다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">02</span><h2>검증 프로토콜</h2></div>
+  <div class="col">
+    <p>단일 백테스트는 성과로 보고하지 않는다. 파라미터를 전 구간에서 고르면 그 성과는 이미 답을 보고 푼 것이기 때문이다.
+    대신 <strong>walk-forward</strong> 를 쓴다 — 학습 구간에서만 파라미터를 탐색하고, 그 파라미터로 다음 1년을 <em>한 번만</em> 실행한 뒤,
+    모든 검증 구간을 이어붙인 수익률만 공식 성과로 인정한다.</p>
+    <p>학습과 검증 사이에는 <strong>21일 엠바고</strong>를 둔다. 학습 마지막 신호의 보유기간이 검증 시작과 겹치면
+    학습이 검증 정보를 흡수하기 때문이다.</p>
+    <blockquote>같은 데이터에서 실험을 반복할수록 DSR 은 스스로 나빠진다. 이건 결함이 아니라 설계다 —
+    136개 팩터와 파라미터 공간을 훑으면 순수한 노이즈에서도 Sharpe 2 는 나온다.</blockquote>
+    <p>A안은 폴드 19개(시도 228회), B안은 폴드 17개(시도 136회)로 돌았다. 두 경우 모두 검증 구간은
+    학습 구간보다 항상 미래에 있다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">03</span><h2>아웃오브샘플 성과</h2></div>
+  <figure>
+    <div class="chart-card">
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--s1)"></i>A · 역대 S&amp;P500</span>
+        <span><i class="swatch" style="background:var(--s2)"></i>B · 마이크로캡 $100M–$1B</span>
+      </div>
+      <div class="chart-host">
+        <svg id="chart" viewBox="0 0 920 380" role="img" aria-label="두 전략의 아웃오브샘플 누적 수익 곡선"></svg>
+        <div class="tipbox" id="tip"></div>
+      </div>
+    </div>
+    <figcaption>검증 구간만 이어붙인 누적 수익(로그 축, 시작 1.0). 학습 구간은 포함하지 않는다.
+    A안은 2008년 –52.5%, B안은 2022년 –12.7% 가 각 전략의 최악의 해다.</figcaption>
+  </figure>
+
+  <div class="tablewrap">
+    <table>
+      <caption>공식 성과 요약 — 검증 구간만</caption>
+      <thead><tr><th>지표</th><th class="n">A · 역대 S&amp;P500</th><th class="n">B · 마이크로캡</th></tr></thead>
+      <tbody>
+        <tr><td>검증 구간</td><td class="n">2007-12 ~ 2026-08</td><td class="n">2009-12 ~ 2026-08</td></tr>
+        <tr><td>기간</td><td class="n">18.6년</td><td class="n">16.6년</td></tr>
+        <tr><td>누적 수익</td><td class="n pos">+805.1%</td><td class="n pos">+199.5%</td></tr>
+        <tr><td>CAGR</td><td class="n">12.59%</td><td class="n">6.84%</td></tr>
+        <tr><td>연 변동성</td><td class="n">25.49%</td><td class="n">22.98%</td></tr>
+        <tr><td>OOS Sharpe</td><td class="n">0.397</td><td class="n">0.186</td></tr>
+        <tr><td>최대 낙폭</td><td class="n neg">−63.3%</td><td class="n neg">−54.6%</td></tr>
+        <tr><td>최악의 해</td><td class="n neg">−52.5%</td><td class="n neg">−13.2%</td></tr>
+        <tr><td>플러스 해</td><td class="n">17 / 20</td><td class="n">11 / 18</td></tr>
+        <tr class="hl"><td><strong>Deflated Sharpe</strong></td><td class="n"><strong>0.000</strong></td><td class="n"><strong>0.000</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <caption>연도별 검증 수익률 (%)</caption>
+      <thead><tr><th>연도</th><th class="n">A</th><th class="n">B</th><th>연도</th><th class="n">A</th><th class="n">B</th></tr></thead>
+      <tbody id="yearly"></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">04</span><h2>왜 실패했는가</h2></div>
+  <div class="col">
+    <h3>수익이 없어서가 아니라, 그 수익이 우연과 구분되지 않아서다</h3>
+    <p>A안은 18.6년 동안 연 12.6% 를 냈다. 문제는 그 숫자를 얻기까지 228번 시도했다는 데 있다.
+    228번 중 가장 좋은 하나를 고르면, 아무 신호가 없는 데이터에서도 Sharpe 0.4 정도는 흔히 나온다.
+    DSR 은 정확히 그 몫을 빼고 남는 것을 보는데, 남는 게 없었다.</p>
+
+    <h3>파라미터가 폴드마다 널뛴다</h3>
+    <p>A안의 보유 종목수는 폴드에 따라 15~17 과 46~47 사이를 오갔다. 최적값이 이렇게 갈리면
+    그 파라미터는 시장 구조가 아니라 그 구간의 노이즈를 맞추고 있다는 뜻이다.
+    반면 리밸런싱 주기(분기말)와 비중 방식(균등)은 대부분의 폴드에서 일관되게 선택됐다 —
+    이 둘은 실제 구조일 가능성이 있다.</p>
+
+    <h3>마이크로캡 가설은 문헌이 경고한 대로 무너졌다</h3>
+    <p>“기관이 못 건드는 구간”은 이론적 근거가 있다. 소외기업 효과(Arbel &amp; Strebel, 1983)와
+    투자자 기반 규모 연구는 기관 보유가 적은 종목에서만 지속되는 아노말리를 보고한다.
+    그러나 Hou·Xue·Zhang(2020, <em>Review of Financial Studies</em>)은 반대편을 보여준다 —
+    마이크로캡을 NYSE 브레이크포인트와 가치가중으로 억제하면 <strong>452개 아노말리 중 65%가
+    t &gt; 1.96 을 넘지 못한다.</strong> 다중검정 기준(t &gt; 2.78)에서는 82% 가 탈락한다.</p>
+    <p>이번 검증은 그 경고를 실측으로 재현했다. 유동성 하한($1M/일)과 소형주 슬리피지(40bp)를
+    정직하게 걸자, 마이크로캡의 OOS Sharpe 는 대형주의 <strong>절반 이하</strong>(0.186 vs 0.397)로 떨어졌다.
+    회전율이 리밸런싱당 67.6% 에 달해 비용이 알파를 먼저 먹는다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">05</span><h2>팩터별 예측력</h2></div>
+  <div class="col">
+    <p>전략 전체는 기각됐지만, 개별 팩터의 예측력(Rank IC)은 따로 볼 값어치가 있다.
+    아래는 A안 유니버스에서 측정한 결과다. <strong>단조성</strong>은 분위수별 수익이 순서대로 나오는지를 보는 값으로,
+    1.0 이면 완벽히 단조롭다.</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <caption>팩터 Rank IC — |t| &gt; 2 만 유의</caption>
+      <thead><tr><th>팩터</th><th>내용</th><th class="n">IC</th><th class="n">t</th><th class="n">단조성</th><th class="n">회전율</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">REVENUE_GROWTH_YOY</td><td>매출 성장 (YoY)</td><td class="n">0.0140</td><td class="n">2.96</td><td class="n">0.3</td><td class="n">0.10</td></tr>
+        <tr><td class="mono">ROIC</td><td>투하자본이익률</td><td class="n">0.0181</td><td class="n">2.75</td><td class="n">−0.3</td><td class="n">0.08</td></tr>
+        <tr class="hl"><td class="mono">GP_A</td><td>총이익 / 자산</td><td class="n">0.0160</td><td class="n">2.57</td><td class="n">1.0</td><td class="n">0.04</td></tr>
+        <tr><td class="mono">ROE</td><td>자기자본이익률</td><td class="n">0.0108</td><td class="n">2.14</td><td class="n">−0.1</td><td class="n">0.10</td></tr>
+        <tr><td class="mono">EV_EBITDA</td><td>EV / EBITDA</td><td class="n">0.0142</td><td class="n">2.11</td><td class="n">0.0</td><td class="n">0.19</td></tr>
+        <tr><td class="mono">PER</td><td>주가수익비율</td><td class="n">0.0128</td><td class="n">2.09</td><td class="n">0.0</td><td class="n">0.21</td></tr>
+        <tr><td class="mono">MOM_12_1</td><td>12-1개월 모멘텀</td><td class="n">0.0171</td><td class="n">1.59</td><td class="n">0.0</td><td class="n">0.23</td></tr>
+        <tr><td class="mono">PBR</td><td>주가순자산비율</td><td class="n">−0.0023</td><td class="n">−0.29</td><td class="n">0.0</td><td class="n">0.07</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col">
+    <p><strong>GP_A 가 유일하게 깨끗하다.</strong> 유의성(t 2.57)에 더해 단조성 1.0 — 분위수별 수익이 완벽히 순서대로 나온다 —
+    그리고 회전율 0.04 로 비용 부담이 가장 낮다. Novy-Marx(2013)의 총수익성 팩터가 그대로 재현된 셈이다.</p>
+    <p>반대로 <strong>PBR 은 음수</strong>다. 장부가 기준 가치 팩터가 미국 대형주에서 작동을 멈췄다는
+    기존 관찰과 일치한다. 지금 전략에서 PBR 은 알파가 아니라 잡음을 넣고 있었다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">06</span><h2>한계</h2></div>
+  <div class="col">
+    <ul>
+      <li><strong>탐색 공간을 좁혔다.</strong> 계산 비용 때문에 비중 방식은 균등·역변동성 두 가지만 탐색했다.
+      리스크패리티·HRP·Black-Litterman 은 리밸런싱일마다 최적화를 돌려야 해 이번 실행에서 제외했다.</li>
+      <li><strong>B안 유니버스는 사전 필터를 거쳤다.</strong> 시총·유동성 조건을 750일 이상 만족한 종목만 후보로 삼았다.
+      이 조건 자체가 미약한 선택 편향을 만들 수 있다.</li>
+      <li><strong>비용 모델은 선형이다.</strong> 시장충격(√ 모델)을 끈 상태이며, 운용 규모가 커지면 마이크로캡 쪽 성과는
+      여기 적힌 것보다 더 나빠진다.</li>
+      <li><strong>세금은 반영하지 않았다.</strong> 회전율이 높은 전략일수록 세후 수익은 이 보고서보다 낮다.</li>
+    </ul>
+  </div>
+</section>
+
+<hr>
+
+<section style="margin-top:0">
+  <div class="sec-head"><span class="sec-num">07</span><h2>다음 단계</h2></div>
+  <div class="col">
+    <p>기각은 실패가 아니라 정보다. 지금 데이터가 말하는 것은 “이 12개 팩터를 균등하게 섞고
+    파라미터를 228번 탐색하는 방식으로는 안 된다”이지, “미국 주식 팩터가 죽었다”가 아니다.
+    시도 횟수를 줄이는 방향이 DSR 을 개선하는 가장 직접적인 길이다.</p>
+    <ul>
+      <li><strong>팩터를 줄인다.</strong> IC 가 유의하지 않은 PBR·PSR·MOM_6M 을 빼면 탐색 공간과 시도 횟수가 함께 줄어든다.
+      GP_A 단독 또는 GP_A + 저변동성 조합처럼 <em>사전에 이유를 댈 수 있는</em> 소수 팩터로 시작하는 편이 DSR 에 유리하다.</li>
+      <li><strong>파라미터를 고정한다.</strong> 폴드마다 널뛰는 보유 종목수를 탐색 대상에서 빼고 30 으로 고정하면
+      시도 횟수가 줄어 정산 부담이 내려간다.</li>
+      <li><strong>가치가중으로도 확인한다.</strong> Hou·Xue·Zhang 의 지적대로, 균등가중에서만 살아남는 결과는 신뢰하기 어렵다.</li>
+    </ul>
+    <p class="footnote">공식 성과의 정의는 이 시스템에서 <span class="mono">optimize</span>(walk-forward + DSR) 하나뿐이다.
+    단일 백테스트 수치는 어떤 경우에도 성과로 보고하지 않는다.</p>
+  </div>
+</section>
+
+</div>
+
+<script>
+const DATA = {"sp500": {"dates": ["2007-12", "2008-01", "2008-02", "2008-03", "2008-04", "2008-05", "2008-06", "2008-07", "2008-08", "2008-09", "2008-10", "2008-11", "2008-12", "2009-01", "2009-02", "2009-03", "2009-04", "2009-05", "2009-06", "2009-07", "2009-08", "2009-09", "2009-10", "2009-11", "2009-12", "2010-01", "2010-02", "2010-03", "2010-04", "2010-05", "2010-06", "2010-07", "2010-08", "2010-09", "2010-10", "2010-11", "2010-12", "2011-01", "2011-02", "2011-03", "2011-04", "2011-05", "2011-06", "2011-07", "2011-08", "2011-09", "2011-10", "2011-11", "2011-12", "2012-01", "2012-02", "2012-03", "2012-04", "2012-05", "2012-06", "2012-07", "2012-08", "2012-09", "2012-10", "2012-11", "2012-12", "2013-01", "2013-02", "2013-03", "2013-04", "2013-05", "2013-06", "2013-07", "2013-08", "2013-09", "2013-10", "2013-11", "2013-12", "2014-01", "2014-02", "2014-03", "2014-04", "2014-05", "2014-06", "2014-07", "2014-08", "2014-09", "2014-10", "2014-11", "2014-12", "2015-01", "2015-02", "2015-03", "2015-04", "2015-05", "2015-06", "2015-07", "2015-08", "2015-09", "2015-10", "2015-11", "2015-12", "2016-01", "2016-02", "2016-03", "2016-04", "2016-05", "2016-06", "2016-07", "2016-08", "2016-09", "2016-10", "2016-11", "2016-12", "2017-01", "2017-02", "2017-03", "2017-04", "2017-05", "2017-06", "2017-07", "2017-08", "2017-09", "2017-10", "2017-11", "2017-12", "2018-01", "2018-02", "2018-03", "2018-04", "2018-05", "2018-06", "2018-07", "2018-08", "2018-09", "2018-10", "2018-11", "2018-12", "2019-01", "2019-02", "2019-03", "2019-04", "2019-05", "2019-06", "2019-07", "2019-08", "2019-09", "2019-10", "2019-11", "2019-12", "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01", "2021-02", "2021-03", "2021-04", "2021-05", "2021-06", "2021-07", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"], "equity": [1.0, 0.9644, 0.9467, 0.9, 0.9583, 1.0224, 0.9295, 0.8944, 0.8966, 0.7144, 0.5296, 0.469, 0.4746, 0.4236, 0.3969, 0.4412, 0.5014, 0.5192, 0.5266, 0.573, 0.5857, 0.6225, 0.6033, 0.6422, 0.6642, 0.6185, 0.6554, 0.7302, 0.7618, 0.7181, 0.6549, 0.6884, 0.6261, 0.694, 0.7305, 0.7618, 0.8281, 0.8659, 0.9566, 0.9717, 0.9969, 0.9861, 0.9751, 0.9624, 0.9279, 0.7973, 0.9292, 0.9396, 0.9165, 0.9165, 0.9165, 0.9165, 0.8919, 0.8493, 0.8653, 0.8982, 0.9602, 0.9672, 0.9183, 0.969, 1.0105, 1.0498, 1.0606, 1.1041, 1.1082, 1.1586, 1.1528, 1.231, 1.1892, 1.23, 1.2744, 1.3272, 1.3586, 1.2946, 1.3489, 1.3834, 1.3674, 1.3992, 1.4543, 1.4081, 1.4782, 1.4489, 1.5182, 1.5967, 1.6189, 1.6169, 1.7425, 1.7788, 1.6805, 1.7571, 1.7731, 1.8472, 1.7864, 1.769, 1.8964, 1.9173, 1.8346, 1.757, 1.7298, 1.8439, 1.7756, 1.6701, 1.6773, 1.7271, 1.7174, 1.7417, 1.7188, 1.9104, 1.8594, 1.8594, 1.8594, 1.8594, 1.8859, 1.8958, 1.8681, 1.8815, 1.8303, 1.9502, 1.9863, 2.0648, 2.1006, 2.1006, 2.1006, 2.1006, 2.1368, 2.272, 2.3243, 2.3819, 2.4025, 2.2585, 2.0421, 2.0356, 1.8029, 1.9843, 2.0633, 2.0682, 2.1304, 1.8553, 1.9988, 1.9767, 1.8348, 1.8947, 1.9075, 2.0043, 2.0633, 2.0007, 1.8562, 1.4724, 1.7306, 1.9513, 1.9987, 2.109, 2.2082, 2.1636, 2.1147, 2.3405, 2.4128, 2.7413, 2.7893, 3.0228, 3.1357, 3.1939, 3.2725, 3.2061, 3.4564, 3.2862, 3.5727, 3.6719, 3.644, 3.5571, 3.7774, 3.8622, 3.8186, 4.0838, 3.3171, 3.7995, 3.9736, 3.5687, 4.2653, 4.4062, 3.9598, 3.9598, 3.9598, 3.9598, 3.8696, 4.1074, 4.7145, 4.9864, 4.9269, 4.7581, 4.5015, 5.0197, 5.5825, 5.5825, 5.5825, 5.5825, 5.1489, 5.4992, 5.3865, 5.62, 5.5391, 5.8401, 5.705, 6.4096, 5.9736, 6.1089, 5.8343, 5.438, 5.2546, 5.845, 5.8971, 6.0418, 6.3159, 6.7485, 6.724, 7.2865, 7.3777, 7.6267, 7.9804, 7.5376, 7.889, 8.6413, 8.9949, 8.8874, 9.0508], "yearly": {"2007": 0.0, "2008": -0.5254, "2009": 0.3995, "2010": 0.2468, "2011": 0.1067, "2012": 0.1026, "2013": 0.3444, "2014": 0.1916, "2015": 0.1332, "2016": 0.0135, "2017": 0.1297, "2018": -0.1417, "2019": 0.1445, "2020": 0.1694, "2021": 0.5103, "2022": 0.0867, "2023": 0.4098, "2024": 0.0701, "2025": 0.2351, "2026": 0.2268}}, "micro": {"dates": ["2009-12", "2010-01", "2010-02", "2010-03", "2010-04", "2010-05", "2010-06", "2010-07", "2010-08", "2010-09", "2010-10", "2010-11", "2010-12", "2011-01", "2011-02", "2011-03", "2011-04", "2011-05", "2011-06", "2011-07", "2011-08", "2011-09", "2011-10", "2011-11", "2011-12", "2012-01", "2012-02", "2012-03", "2012-04", "2012-05", "2012-06", "2012-07", "2012-08", "2012-09", "2012-10", "2012-11", "2012-12", "2013-01", "2013-02", "2013-03", "2013-04", "2013-05", "2013-06", "2013-07", "2013-08", "2013-09", "2013-10", "2013-11", "2013-12", "2014-01", "2014-02", "2014-03", "2014-04", "2014-05", "2014-06", "2014-07", "2014-08", "2014-09", "2014-10", "2014-11", "2014-12", "2015-01", "2015-02", "2015-03", "2015-04", "2015-05", "2015-06", "2015-07", "2015-08", "2015-09", "2015-10", "2015-11", "2015-12", "2016-01", "2016-02", "2016-03", "2016-04", "2016-05", "2016-06", "2016-07", "2016-08", "2016-09", "2016-10", "2016-11", "2016-12", "2017-01", "2017-02", "2017-03", "2017-04", "2017-05", "2017-06", "2017-07", "2017-08", "2017-09", "2017-10", "2017-11", "2017-12", "2018-01", "2018-02", "2018-03", "2018-04", "2018-05", "2018-06", "2018-07", "2018-08", "2018-09", "2018-10", "2018-11", "2018-12", "2019-01", "2019-02", "2019-03", "2019-04", "2019-05", "2019-06", "2019-07", "2019-08", "2019-09", "2019-10", "2019-11", "2019-12", "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01", "2021-02", "2021-03", "2021-04", "2021-05", "2021-06", "2021-07", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"], "equity": [1.0, 0.9343, 0.9879, 1.1104, 1.1775, 1.0821, 0.9821, 1.0535, 0.9066, 1.0533, 1.1243, 1.1827, 1.2891, 1.3061, 1.3429, 1.3576, 1.387, 1.3903, 1.3568, 1.2834, 1.1535, 0.9944, 1.1745, 1.1529, 1.1706, 1.1706, 1.1678, 1.2244, 1.2024, 1.1223, 1.1757, 1.1482, 1.1821, 1.226, 1.1752, 1.1765, 1.1919, 1.2335, 1.2436, 1.3046, 1.3722, 1.4477, 1.4425, 1.5697, 1.5306, 1.6479, 1.7417, 1.8288, 1.8072, 1.7839, 1.8179, 1.8633, 1.8326, 1.7652, 1.7972, 1.6422, 1.7593, 1.6397, 1.7193, 1.7191, 1.7488, 1.6817, 1.701, 1.7458, 1.7778, 1.7296, 1.7516, 1.8103, 1.7187, 1.6472, 1.7187, 1.8278, 1.715, 1.6059, 1.6073, 1.6761, 1.6889, 1.6181, 1.6355, 1.6618, 1.6938, 1.7027, 1.6315, 1.8939, 1.9734, 1.9734, 1.9734, 1.9734, 2.0403, 1.9821, 1.9674, 1.9534, 1.9186, 2.0981, 2.1107, 2.1455, 2.1255, 2.1255, 2.0621, 2.1865, 2.1667, 2.2996, 2.3047, 2.2721, 2.4966, 2.3707, 2.1516, 2.0732, 1.8451, 1.9823, 2.0805, 2.0782, 2.1835, 1.9487, 2.0069, 1.9536, 1.8458, 1.9125, 1.9491, 1.9803, 2.0244, 1.9246, 1.756, 1.3981, 1.6634, 1.8374, 1.945, 1.9899, 2.0599, 1.9862, 2.0022, 2.2162, 2.4205, 2.6549, 2.7621, 2.8836, 2.8687, 2.8873, 2.9374, 2.8525, 2.8348, 2.76, 2.8274, 2.7857, 2.8822, 2.5905, 2.6016, 2.5697, 2.4239, 2.4424, 2.2486, 2.4924, 2.3671, 2.1323, 2.4453, 2.6087, 2.5148, 2.5148, 2.5148, 2.5148, 2.4125, 2.273, 2.4929, 2.5737, 2.5145, 2.4295, 2.2714, 2.5423, 2.6972, 2.6972, 2.7707, 2.8026, 2.5836, 2.6589, 2.5468, 2.8439, 2.7225, 2.6995, 2.6626, 2.8594, 2.8058, 2.8048, 2.6518, 2.4546, 2.4287, 2.5623, 2.7256, 2.6282, 2.8211, 2.8216, 2.6505, 2.6008, 2.6902, 2.816, 2.8319, 2.6977, 2.8347, 2.7972, 2.9543, 3.0006, 2.9945], "yearly": {"2009": 0.0, "2010": 0.2891, "2011": -0.092, "2012": 0.0182, "2013": 0.5162, "2014": -0.0323, "2015": -0.0193, "2016": 0.1507, "2017": 0.0771, "2018": -0.1319, "2019": 0.0972, "2020": 0.1957, "2021": 0.1907, "2022": -0.1275, "2023": 0.0725, "2024": 0.0403, "2025": -0.0412, "2026": 0.1131}}};
+const YEARLY = {"sp500": {"2007": 0.0, "2008": -52.5, "2009": 39.9, "2010": 24.7, "2011": 10.7, "2012": 10.3, "2013": 34.4, "2014": 19.2, "2015": 13.3, "2016": 1.4, "2017": 13.0, "2018": -14.2, "2019": 14.4, "2020": 16.9, "2021": 51.0, "2022": 8.7, "2023": 41.0, "2024": 7.0, "2025": 23.5, "2026": 22.7}, "micro": {"2009": 0.0, "2010": 28.9, "2011": -9.2, "2012": 1.8, "2013": 51.6, "2014": -3.2, "2015": -1.9, "2016": 15.1, "2017": 7.7, "2018": -13.2, "2019": 9.7, "2020": 19.6, "2021": 19.1, "2022": -12.7, "2023": 7.3, "2024": 4.0, "2025": -4.1, "2026": 11.3}};
+
+/* 연도별 표 — 2열 배치 */
+(function(){
+  const years = Object.keys(YEARLY.sp500).concat(Object.keys(YEARLY.micro));
+  const uniq = [...new Set(years)].sort();
+  const half = Math.ceil(uniq.length/2);
+  const rows = [];
+  const fmt = v => v === undefined ? '<td class="n">—</td>'
+    : `<td class="n ${v>=0?'pos':'neg'}">${v>0?'+':''}${v.toFixed(1)}</td>`;
+  for(let i=0;i<half;i++){
+    const a = uniq[i], b = uniq[i+half];
+    let tr = `<tr><td class="mono">${a}</td>${fmt(YEARLY.sp500[a])}${fmt(YEARLY.micro[a])}`;
+    tr += b ? `<td class="mono">${b}</td>${fmt(YEARLY.sp500[b])}${fmt(YEARLY.micro[b])}</tr>`
+            : `<td></td><td></td><td></td></tr>`;
+    rows.push(tr);
+  }
+  document.getElementById('yearly').innerHTML = rows.join('');
+})();
+
+/* 누적 수익 곡선 — 로그 축 */
+(function(){
+  const svg = document.getElementById('chart'), tip = document.getElementById('tip');
+  const W=920,H=380,M={t:14,r:16,b:34,l:52};
+  const iw=W-M.l-M.r, ih=H-M.t-M.b;
+  const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+  const series = [
+    {key:'sp500', label:'A · 역대 S&P500', color:'var(--s1)'},
+    {key:'micro', label:'B · 마이크로캡',   color:'var(--s2)'}
+  ];
+  const allDates = [...new Set(series.flatMap(s=>DATA[s.key].dates))].sort();
+  const x = d => M.l + (allDates.indexOf(d)/(allDates.length-1))*iw;
+  const vals = series.flatMap(s=>DATA[s.key].equity);
+  const lo = Math.min(...vals, 0.9), hi = Math.max(...vals);
+  const ly = v => Math.log(Math.max(v,0.05));
+  const y = v => M.t + ih - ((ly(v)-ly(lo))/(ly(hi)-ly(lo)))*ih;
+
+  let out = '';
+  /* 그리드 + y축 */
+  [1,2,4,8].filter(t=>t>=lo&&t<=hi*1.05).forEach(t=>{
+    out += `<line class="gridline" x1="${M.l}" x2="${W-M.r}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/>`;
+    out += `<text class="axis" x="${M.l-10}" y="${(y(t)+4).toFixed(1)}" text-anchor="end">${t}×</text>`;
+  });
+  /* x축 연도 */
+  allDates.filter(d=>d.endsWith('-12') && (+d.slice(0,4))%3===0).forEach(d=>{
+    out += `<text class="axis" x="${x(d).toFixed(1)}" y="${H-M.b+20}" text-anchor="middle">${d.slice(0,4)}</text>`;
+  });
+  /* 기준선 1.0 */
+  out += `<line x1="${M.l}" x2="${W-M.r}" y1="${y(1).toFixed(1)}" y2="${y(1).toFixed(1)}" stroke="${css('--ink-3')}" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`;
+
+  series.forEach(s=>{
+    const d = DATA[s.key];
+    const path = d.dates.map((dt,i)=>`${i?'L':'M'}${x(dt).toFixed(1)} ${y(d.equity[i]).toFixed(1)}`).join(' ');
+    out += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const li = d.dates.length-1;
+    out += `<circle cx="${x(d.dates[li]).toFixed(1)}" cy="${y(d.equity[li]).toFixed(1)}" r="4" fill="${s.color}" stroke="${css('--panel')}" stroke-width="2"/>`;
+  });
+  out += `<line id="cross" x1="0" x2="0" y1="${M.t}" y2="${M.t+ih}" stroke="${css('--ink-3')}" stroke-width="1" opacity="0"/>`;
+  svg.innerHTML = out;
+
+  const cross = document.getElementById('cross');
+  svg.addEventListener('pointermove', e=>{
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX-r.left)/r.width*W;
+    let idx = Math.round((px-M.l)/iw*(allDates.length-1));
+    idx = Math.max(0, Math.min(allDates.length-1, idx));
+    const dt = allDates[idx];
+    cross.setAttribute('x1', x(dt)); cross.setAttribute('x2', x(dt)); cross.setAttribute('opacity','.45');
+    const lines = series.map(s=>{
+      const i = DATA[s.key].dates.indexOf(dt);
+      return i<0 ? null : `${s.label.split('·')[0].trim()} ${DATA[s.key].equity[i].toFixed(2)}×`;
+    }).filter(Boolean);
+    tip.innerHTML = `<b>${dt}</b><br>${lines.join('<br>')}`;
+    tip.style.opacity = 1;
+    tip.style.left = Math.min(r.width-140, Math.max(0, (x(dt)/W)*r.width + 12)) + 'px';
+    tip.style.top = '12px';
+  });
+  svg.addEventListener('pointerleave', ()=>{ tip.style.opacity=0; cross.setAttribute('opacity','0'); });
+})();
+</script>
