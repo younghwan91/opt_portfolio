@@ -109,22 +109,33 @@ class WalkForwardResult:
     folds: list[Fold]
     params_per_fold: list[Params]
     searches: list[SearchResult] = field(repr=False, default_factory=list)
+    #: 목적함수가 연율화 Sharpe 인가 — DSR 의 sr_var 단위 변환 여부를 가른다
+    objective_is_sharpe: bool = True
 
     @property
     def n_trials_total(self) -> int:
         return sum(s.n_trials for s in self.searches)
 
-    def deflated_sharpe(self) -> float:
+    def deflated_sharpe(self, ann: int = 252) -> float:
         """
         전 시도 횟수를 반영한 DSR.
 
         시도 간 SR 분산은 폴드별 탐색 로그에서 직접 추정한다 —
         보수적 기본값보다 실측이 낫다.
+
+        ⚠️ **단위**: `deflated_sharpe_ratio` 는 sr_var 를 기간(일별) 단위로
+        요구한다. 목적함수 `annualized_sharpe` 는 연율화 값을 내므로 분산이
+        ann 배 부풀려져 있다. 그대로 넘기면 SR₀ 가 √ann ≈ 15.9배 커져
+        DSR 이 실제와 무관하게 0 으로 짜부라진다 (2026-08-12 실측: 같은
+        수익률에서 0.000 vs 0.910). 목적함수가 Sharpe 가 아니면(예: Calmar)
+        분산의 의미가 달라지므로 아예 추정하지 않고 보수적 기본값에 맡긴다.
         """
+        if not self.objective_is_sharpe:
+            return deflated_sharpe_ratio(self.oos_returns, max(self.n_trials_total, 1))
         objectives = np.concatenate(
             [s.objectives()[np.isfinite(s.objectives())] for s in self.searches]
         )
-        sr_var = float(np.var(objectives)) if len(objectives) > 1 else None
+        sr_var = float(np.var(objectives)) / ann if len(objectives) > 1 else None
         return deflated_sharpe_ratio(self.oos_returns, max(self.n_trials_total, 1), sr_var)
 
     def sharpe(self, ann: int = 252, risk_free_rate: float = RISK_FREE_RATE) -> float:
@@ -159,6 +170,38 @@ def annualized_sharpe(
         return -np.inf
     excess = r - risk_free_rate / ann
     return float(excess.mean() / sd * np.sqrt(ann))
+
+
+#: 낙폭이 사실상 0 일 때 Calmar 가 발산하는 것을 막는 하한 (1bp).
+_MIN_DRAWDOWN = 1e-4
+
+
+def annualized_calmar(returns: pd.Series, ann: int = 252) -> float:
+    """
+    Calmar = CAGR / |최대낙폭|. 관측 60일 미만이면 -inf.
+
+    Sharpe 는 변동성으로 나누므로 위아래 흔들림을 같게 벌하지만, Calmar 는
+    **낙폭**으로 나눈다. 같은 변동성이라도 한 번에 깊게 빠지는 전략을 더
+    강하게 벌하므로, '실제로 들고 버틸 수 있는가'에 가까운 목적함수다.
+
+    낙폭이 0 에 가까우면 값이 발산한다 — 탐색기가 그 점을 붙잡으면 표본이
+    짧아 낙폭이 안 나온 구간을 최적해로 고르게 되므로 하한을 둔다.
+    """
+    r = returns.dropna()
+    if len(r) < 60:
+        return -np.inf
+    equity = (1.0 + r).cumprod()
+    years = len(r) / ann
+    cagr = float(equity.iloc[-1]) ** (1.0 / years) - 1.0 if years > 0 else np.nan
+    drawdown = float((equity / equity.cummax() - 1.0).min())
+    return float(cagr / max(abs(drawdown), _MIN_DRAWDOWN))
+
+
+#: CLI `--objective` 가 고르는 목적함수들
+OBJECTIVES: dict[str, Callable[[pd.Series], float]] = {
+    "sharpe": annualized_sharpe,
+    "calmar": annualized_calmar,
+}
 
 
 def run_walk_forward(
@@ -225,5 +268,9 @@ def run_walk_forward(
     oos = pd.concat(oos_parts).sort_index()
     oos = oos[~oos.index.duplicated(keep="first")]
     return WalkForwardResult(
-        oos_returns=oos, folds=folds, params_per_fold=chosen, searches=searches
+        oos_returns=oos,
+        folds=folds,
+        params_per_fold=chosen,
+        searches=searches,
+        objective_is_sharpe=objective is annualized_sharpe,
     )

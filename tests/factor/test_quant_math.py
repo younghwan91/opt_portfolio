@@ -241,3 +241,84 @@ class TestSharpeConvention:
         )
 
         assert result.stats()["sharpe"] == pytest.approx(annualized_sharpe(returns))
+
+
+class TestCalmarObjective:
+    """
+    Calmar = CAGR / |최대낙폭|. Sharpe 가 변동성으로 나누는 것과 달리
+    **낙폭**으로 나누므로, 같은 변동성이라도 한 번에 깊게 빠지는 전략을
+    더 강하게 벌한다. 실전에서 견딜 수 있는지를 보는 지표다.
+    """
+
+    def test_deeper_drawdown_scores_lower(self) -> None:
+        from opt_portfolio.factor.optimize.walkforward import annualized_calmar
+
+        idx = pd.date_range("2020-01-01", periods=756, freq="B")
+        steady = pd.Series(0.0004, index=idx)
+        crashed = steady.copy()
+        crashed.iloc[100:130] = -0.02  # 한 달간 급락
+
+        assert annualized_calmar(crashed) < annualized_calmar(steady)
+
+    def test_no_drawdown_is_not_infinite(self) -> None:
+        """낙폭이 0 이면 나눗셈이 폭발한다 — 탐색이 그 점을 붙잡으면 안 된다."""
+        from opt_portfolio.factor.optimize.walkforward import annualized_calmar
+
+        idx = pd.date_range("2020-01-01", periods=300, freq="B")
+        monotone = pd.Series(0.0005, index=idx)
+
+        assert np.isfinite(annualized_calmar(monotone))
+
+    def test_too_short_is_rejected(self) -> None:
+        from opt_portfolio.factor.optimize.walkforward import annualized_calmar
+
+        short = pd.Series(0.001, index=pd.date_range("2020-01-01", periods=30, freq="B"))
+
+        assert annualized_calmar(short) == -np.inf
+
+
+class TestDeflatedSharpeUnits:
+    """
+    DSR 의 sr_var 는 **기간(일별) 단위** SR 분산이다 (`deflated_sharpe_ratio`
+    docstring: "일별이면 일별 그대로 — 연율화 금지").
+
+    그런데 walk-forward 의 목적함수는 `annualized_sharpe` — 연율화된 값이다.
+    그 분산을 그대로 넘기면 252배 부풀려지고, SR₀ 가 √252 ≈ 15.9배 커져
+    DSR 이 실제와 무관하게 0 으로 짜부라진다. 이 저장소가 겪은 DAILY 시총
+    10⁶배 버그와 같은 유형이다.
+    """
+
+    @staticmethod
+    def _result(daily_sr_values: list[float]):
+        from opt_portfolio.factor.optimize.search import SearchResult, Trial
+        from opt_portfolio.factor.optimize.walkforward import Fold, WalkForwardResult
+
+        rng = np.random.default_rng(3)
+        returns = pd.Series(
+            rng.normal(0.0008, 0.011, 2000),
+            index=pd.date_range("2015-01-01", periods=2000, freq="B"),
+        )
+        ann = [v * np.sqrt(252) for v in daily_sr_values]  # 목적함수는 연율화 값을 낸다
+        trials = [Trial(params={"n": i}, objective=v) for i, v in enumerate(ann)]
+        fold = Fold(*pd.to_datetime(["2015-01-01", "2018-01-01", "2018-02-01", "2019-01-01"]))
+        return WalkForwardResult(
+            oos_returns=returns,
+            folds=[fold],
+            params_per_fold=[{"n": 0}],
+            searches=[SearchResult(best_params={"n": 0}, best_objective=max(ann), trials=trials)],
+        )
+
+    def test_annualized_objectives_are_converted_to_period_units(self) -> None:
+        """연율화 분산을 그대로 쓰면 DSR 이 0 으로 죽는다 — 변환돼야 한다."""
+        from opt_portfolio.factor.research.overfitting import deflated_sharpe_ratio
+
+        daily_sr = [0.02, 0.03, 0.04, 0.05]
+        result = self._result(daily_sr)
+
+        expected = deflated_sharpe_ratio(result.oos_returns, 4, float(np.var(daily_sr)))
+        assert result.deflated_sharpe() == pytest.approx(expected, abs=1e-6)
+
+    def test_not_crushed_to_zero_by_unit_error(self) -> None:
+        result = self._result([0.02, 0.03, 0.04, 0.05])
+
+        assert result.deflated_sharpe() > 0.5, "단위 오류로 DSR 이 0 에 붙었다"

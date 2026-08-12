@@ -381,7 +381,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def cmd_optimize(args: argparse.Namespace) -> int:
-    from opt_portfolio.factor.optimize.walkforward import run_walk_forward
+    from opt_portfolio.factor.optimize.walkforward import OBJECTIVES, run_walk_forward
 
     pipeline, config = _pipeline(args)
     space = load_space(args.space)
@@ -389,6 +389,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         pipeline.evaluator(config),
         space,
         pd.DatetimeIndex(pipeline.close.index),
+        objective=OBJECTIVES[args.objective],
         method=args.method,
         n_trials_per_fold=args.trials,
         min_train_years=args.min_train_years,
@@ -500,6 +501,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--min-train-years", type=float, default=5.0)
     p.add_argument("--embargo", type=int, default=21)
     p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
+    p.add_argument("--objective", default="sharpe", choices=["sharpe", "calmar"])
     p.add_argument("--start", default=None)
     p.add_argument("--end", default=None)
     p.add_argument("--out", default=None)
