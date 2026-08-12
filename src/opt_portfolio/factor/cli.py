@@ -385,6 +385,65 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_holdings(args: argparse.Namespace) -> int:
+    """오늘 무엇을 사는가 — 연구 결과를 실제 주문으로 옮기는 지점."""
+    from opt_portfolio.factor.holdings import current_holdings, rebalance_plan
+
+    pipeline, config = _pipeline(args)
+    scores = (
+        pipeline.regime_scores(config) if config.regime_conditional else pipeline.scores(config)
+    )
+    bt = config.backtest
+    mcap = pipeline.ctx.daily.get("mcap")
+    held = current_holdings(
+        scores,
+        pipeline.close,
+        n_stocks=bt.n_stocks,
+        weighting=bt.weighting,
+        max_weight=bt.max_weight,
+        universe=pipeline.universe(config.universe),
+        market_caps=mcap.iloc[-1] if mcap is not None else None,
+        cov_window=bt.cov_window,
+        as_of=args.as_of,
+    )
+    if held.empty:
+        raise SystemExit("선정된 종목이 없습니다 — 유니버스 필터가 너무 좁거나 데이터가 없습니다.")
+
+    meta = pipeline.ctx.meta
+    for col in ("name", "sector"):
+        series = meta.get(col) if hasattr(meta, "get") else None
+        if series is not None and hasattr(series, "reindex"):
+            held[col] = series.reindex(held.index)
+
+    exposure = pipeline.exposure(config)
+    if exposure is not None:
+        level = float(exposure.iloc[-1])
+        state = "투자" if level > 0.5 else ("현금" if level < 0.5 else "부분")
+        print(f"마켓타이밍({config.timing_ma_days}일): 익스포저 {level:.0%} → {state}\n")
+
+    shown = held.copy()
+    shown["weight"] = (shown["weight"] * 100).round(2)
+    print(shown.to_string())
+    print(f"\n총 {len(held)}종목 · 비중 합 {held['weight'].sum():.4f}")
+
+    if args.current:
+        current = pd.read_csv(args.current)
+        if not {"ticker", "weight"} <= set(current.columns):
+            raise SystemExit(f"{args.current} 에 ticker,weight 컬럼이 필요합니다")
+        cur = current.set_index("ticker")["weight"].astype(float)
+        if cur.sum() > 1.5:  # 퍼센트로 준 경우
+            cur = cur / 100.0
+        plan = rebalance_plan(held["weight"], cur)
+        print("\n=== 리밸런싱 계획 ===")
+        print(plan[plan["diff"].abs() > 1e-6].to_string())
+        print(f"\n편도 회전율: {plan['diff'].abs().sum() / 2:.1%}")
+
+    if args.out:
+        held.to_csv(args.out)
+        print(f"\n저장: {args.out}")
+    return 0
+
+
 def cmd_optimize(args: argparse.Namespace) -> int:
     from opt_portfolio.factor.optimize.walkforward import OBJECTIVES, run_walk_forward
 
@@ -488,6 +547,17 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--out", default=None)
         p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
         p.set_defaults(fn=fn)
+
+    p = sub.add_parser("holdings", help="오늘 매수할 종목·비중")
+    p.add_argument("--store", required=True)
+    p.add_argument("--config", required=True)
+    p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
+    p.add_argument("--as-of", default=None, help="기준일 (기본: 최신 신호일)")
+    p.add_argument("--current", default=None, help="현재 보유 CSV (ticker,weight) → 매매 계획")
+    p.add_argument("--start", default=None)
+    p.add_argument("--end", default=None)
+    p.add_argument("--out", default=None)
+    p.set_defaults(fn=cmd_holdings)
 
     p = sub.add_parser("report", help="HTML 티어시트 생성")
     p.add_argument("--store", required=True)
