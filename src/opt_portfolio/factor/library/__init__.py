@@ -9,6 +9,7 @@ from opt_portfolio.factor.dsl.registry import REGISTRY
 
 from . import (  # noqa: F401  (import 부수효과로 팩터가 등록됨)
     acceleration,
+    experimental,
     flow_proxy,
     growth,
     price,
@@ -20,6 +21,7 @@ from . import (  # noqa: F401  (import 부수효과로 팩터가 등록됨)
 __all__ = [
     "REGISTRY",
     "acceleration",
+    "experimental",
     "flow_proxy",
     "growth",
     "price",
