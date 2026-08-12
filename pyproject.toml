@@ -62,6 +62,7 @@ Repository = "https://github.com/yourusername/opt_portfolio.git"
 [project.scripts]
 opt-portfolio = "opt_portfolio.ui.cli:main"
 opt-factor = "opt_portfolio.factor.cli:main"
+opt-factor-tui = "opt_portfolio.factor.tui:main"
 
 [build-system]
 requires = ["hatchling"]
