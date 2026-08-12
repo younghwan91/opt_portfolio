@@ -32,7 +32,7 @@ from opt_portfolio.factor.dsl.context import PanelContext
 from opt_portfolio.factor.dsl.registry import REGISTRY, FactorSpec
 from opt_portfolio.factor.optimize.search import Params
 from opt_portfolio.factor.optimize.walkforward import Evaluator
-from opt_portfolio.factor.portfolio.score import composite_score
+from opt_portfolio.factor.portfolio.score import composite_score, rank_normalize
 from opt_portfolio.factor.universe.filters import UniverseConfig, build_universe
 
 #: BacktestConfig 로 그대로 전달되는 PO 파라미터 키
@@ -61,6 +61,7 @@ class StrategyConfig:
     timing_reentry_days: int = 5
     benchmark: str = "SPY"
     signal_freq: str = "ME"  # 스코어 샘플링 그리드
+    regime_conditional: bool = False  # 레짐별 팩터 가중 (research/regime.py)
     subscribed: tuple[str, ...] = ("SF1", "SEP")  # 구독 중인 데이터셋
 
     def resolved_factors(self) -> list[FactorSpec]:
@@ -89,6 +90,7 @@ class FactorPipeline:
         self.close = ctx.daily["close"]
         self._panel_cache: dict[str, pd.DataFrame] = {}
         self._universe_cache: dict[UniverseConfig, pd.DataFrame] = {}
+        self._regime_cache: dict[tuple, pd.DataFrame] = {}
 
     # ------------------------------------------------------------ 팩터 패널
     def factor_panel(self, spec: FactorSpec, signal_dates: pd.DatetimeIndex) -> pd.DataFrame:
@@ -113,6 +115,69 @@ class FactorPipeline:
         panels = {s.name: self.factor_panel(s, dates) for s in specs}
         weights = factor_weights or config.factor_weights
         return composite_score(panels, weights)
+
+    def regime_scores(
+        self,
+        config: StrategyConfig,
+        *,
+        min_months: int = 60,
+        horizon: int = 21,
+    ) -> pd.DataFrame:
+        """
+        레짐 조건부 합성 스코어 — "지금과 비슷했던 때 통한 팩터"에 가중한다.
+
+        각 신호일 t 의 가중치는 **t 시점까지 관측 가능한 IC** 로만 정한다.
+        IC 는 순방향 수익을 쓰므로 t 에서 계산된 IC 는 t+horizon 이 지나야
+        알 수 있다 — 그래서 한 달치를 더 잘라낸다. 이 두 겹의 지연이 없으면
+        레짐 조건부 백테스트는 조용히 미래를 본다.
+
+        관측이 `min_months` 에 못 미치거나 현재 레짐의 표본이 부족하면
+        **균등 가중으로 후퇴한다.** 조건부 판단이 근거를 잃었을 때 돌아갈
+        곳은 1/N 이다 (DeMiguel et al. 2009).
+        """
+        from opt_portfolio.factor.research.ic import forward_returns, rank_ic
+        from opt_portfolio.factor.research.regime import classify
+
+        # 레짐 가중은 탐색 파라미터(n_stocks 등)와 무관하다. 캐시하지 않으면
+        # 폴드×시도마다 전 구간을 다시 계산해 walk-forward 가 사실상 멈춘다.
+        key = (config.factors, config.benchmark, config.signal_freq, min_months, horizon)
+        if key in self._regime_cache:
+            return self._regime_cache[key]
+
+        dates = self.signal_dates(config.signal_freq)
+        specs = config.resolved_factors()
+        panels = {s.name: self.factor_panel(s, dates) for s in specs}
+
+        benchmark = self.close.get(config.benchmark)
+        if benchmark is None:
+            raise ValueError(f"레짐 판정에 벤치마크 '{config.benchmark}' 가격이 필요합니다")
+        regimes = classify(benchmark).reindex(dates, method="ffill")
+
+        fwd = forward_returns(self.close, horizon=horizon).reindex(dates)
+        ic = pd.DataFrame({name: rank_ic(panel, fwd) for name, panel in panels.items()})
+
+        normalized = {name: rank_normalize(panel) for name, panel in panels.items()}
+        lag = max(1, horizon // 21) + 1  # 순방향 수익 확정 지연 + 여유 1개월
+        out = pd.DataFrame(0.0, index=dates, columns=self.close.columns)
+
+        for i, date in enumerate(dates):
+            usable = ic.iloc[: max(0, i - lag)]
+            regime_now = regimes.iloc[i] if i < len(regimes) else None
+            weights: dict[str, float] = {}
+            if len(usable) >= min_months and regime_now:
+                same = usable[regimes.iloc[: len(usable)].to_numpy() == regime_now]
+                if len(same) >= 12:
+                    mean_ic = same.mean()
+                    positive = mean_ic[mean_ic > 0]
+                    if not positive.empty:
+                        weights = (positive / positive.sum()).to_dict()
+            if not weights:  # 근거 부족 → 1/N
+                weights = dict.fromkeys(panels, 1.0 / len(panels))
+            row = sum(normalized[n].loc[date] * w for n, w in weights.items())
+            out.loc[date] = row
+
+        self._regime_cache[key] = out
+        return out
 
     def universe(self, config: UniverseConfig) -> pd.DataFrame:
         if config not in self._universe_cache:
@@ -142,9 +207,10 @@ class FactorPipeline:
         end: pd.Timestamp | str | None = None,
     ) -> BacktestResult:
         """단일 백테스트. PO 가 아니라 확정 전략의 성과 확인용."""
+        scores = self.regime_scores(config) if config.regime_conditional else self.scores(config)
         return run_backtest(
             self.close,
-            self.scores(config),
+            scores,
             config.backtest,
             universe=self.universe(config.universe),
             market_caps=self.ctx.daily.get("mcap"),
@@ -179,9 +245,14 @@ class FactorPipeline:
                 if weight_overrides
                 else base.factor_weights
             )
+            scores = (
+                self.regime_scores(base)
+                if base.regime_conditional
+                else self.scores(base, factor_weights=weights)
+            )
             result = run_backtest(
                 self.close,
-                self.scores(base, factor_weights=weights),
+                scores,
                 bt_config,
                 universe=universe_mask,
                 market_caps=mcap,

@@ -100,3 +100,47 @@ class TestRegimeWeights:
 
     def test_unknown_regime_yields_no_weights(self) -> None:
         assert weights_for_regime(self._table(), "unknown") == {}
+
+
+class TestRegimeScoresNoLookAhead:
+    """
+    레짐 조건부 가중의 유일한 치명적 실패 모드는 미래 참조다.
+
+    가중치는 IC 에서 나오고 IC 는 순방향 수익을 쓴다. 지연을 제대로 걸지
+    않으면 t 시점 가중치가 t 이후 수익을 이미 알고 정해진다 — 백테스트가
+    화려해지고 실전에서 무너진다.
+    """
+
+    @staticmethod
+    def _pipeline(n_days: int):
+        from opt_portfolio.factor.dsl.context import PanelContext
+        from opt_portfolio.factor.pipeline import FactorPipeline
+
+        rng = np.random.default_rng(11)
+        idx = pd.date_range("2000-01-03", periods=n_days, freq="B")
+        tickers = [f"T{i:02d}" for i in range(30)] + ["SPY"]
+        rets = rng.normal(0.0004, 0.012, (n_days, len(tickers)))
+        close = pd.DataFrame(100 * np.exp(np.cumsum(rets, axis=0)), index=idx, columns=tickers)
+        ctx = PanelContext(
+            daily={"close": close, "closeunadj": close},
+            quarterly={},
+            meta=pd.DataFrame(index=tickers),
+        )
+        return FactorPipeline(ctx)
+
+    def test_future_data_does_not_change_past_scores(self) -> None:
+        import opt_portfolio.factor.library  # noqa: F401
+        from opt_portfolio.factor.pipeline import StrategyConfig
+
+        config = StrategyConfig(
+            factors=("MOM_12_1", "MOM_6M", "VOL_52W"),
+            regime_conditional=True,
+            subscribed=("SEP",),
+        )
+        short = self._pipeline(2200).regime_scores(config, min_months=24)
+        long = self._pipeline(2900).regime_scores(config, min_months=24)
+
+        common = short.index.intersection(long.index)[:-1]  # 마지막 신호일은 그리드 경계
+        pd.testing.assert_frame_equal(
+            short.loc[common], long.loc[common], check_exact=False, atol=1e-9
+        )
