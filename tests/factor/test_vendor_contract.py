@@ -257,3 +257,51 @@ class TestRecordedFixtureDrift:
             assert all(v in (None, "", "None") for v in values), (
                 f"{col} 이 채워져 있다 — avg_balance() 직접 계산이 불필요해졌을 수 있다"
             )
+
+
+class TestBulkPitViolations:
+    """
+    풀 히스토리 벌크에 `datekey < reportperiod` 인 행이 극소수 섞여 있다
+    (2026-08-11 실측: 수백만 행 중 4건). 넣으면 look-ahead 이고, 전량을
+    버리면 4행 때문에 626MB 적재가 무산된다. 제외하되 시끄럽게 남긴다.
+    """
+
+    def _frame(self, n_bad: int, n_good: int) -> pd.DataFrame:
+        from opt_portfolio.factor.data.schema import DEFAULT_DIMENSION
+
+        rows = [
+            {
+                "ticker": f"G{i}",
+                "dimension": DEFAULT_DIMENSION,
+                "calendardate": "2024-03-31",
+                "reportperiod": "2024-03-31",
+                "datekey": "2024-05-02",  # 정상: 공시일 > 결산일
+            }
+            for i in range(n_good)
+        ] + [
+            {
+                "ticker": f"B{i}",
+                "dimension": DEFAULT_DIMENSION,
+                "calendardate": "2024-03-31",
+                "reportperiod": "2024-03-31",
+                "datekey": "2024-01-15",  # 위반: 결산 전 공시
+            }
+            for i in range(n_bad)
+        ]
+        return pd.DataFrame(rows)
+
+    def test_rare_violations_are_dropped_with_warning(self, caplog) -> None:
+        from opt_portfolio.factor.data.sharadar import _csv_fundamentals
+
+        with caplog.at_level("WARNING"):
+            out = _csv_fundamentals(self._frame(n_bad=1, n_good=500))
+
+        assert len(out) == 500, "정상 행까지 버렸다"
+        assert "PIT 위반" in caplog.text, "조용히 버리면 안 된다"
+
+    def test_systemic_violations_still_fail(self) -> None:
+        """1% 를 넘으면 개별 불량이 아니라 구조 문제다 — 멈춰야 한다."""
+        from opt_portfolio.factor.data.sharadar import _csv_fundamentals
+
+        with pytest.raises(ValueError, match="과다"):
+            _csv_fundamentals(self._frame(n_bad=50, n_good=100))

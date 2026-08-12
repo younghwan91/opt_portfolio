@@ -331,6 +331,19 @@ class PITStore:
 
         # 중복 컬럼 방어 — 어댑터 버그가 있어도 스토어는 깨지지 않게
         frame = frame.loc[:, ~frame.columns.duplicated()]
+
+        # 키가 비어 있는 행은 저장할 수 없다 (벤더 데이터에 실재한다 —
+        # DAILY 벌크 CSV 300만 행당 ticker 결측 약 44건). 조용히 버리면
+        # 이 저장소의 지배적 실패 유형이 되므로 반드시 남긴다.
+        before = len(frame)
+        frame = frame.dropna(subset=required)
+        if before != len(frame):
+            logger.warning(
+                "%s: 키 결측으로 %d행 제외 (수신 %d행) — 벤더 데이터 품질 문제",
+                table,
+                before - len(frame),
+                before,
+            )
         present_fields = [f for f in fields if f in frame.columns]
         all_cols = required + present_fields
         frame = frame[all_cols]

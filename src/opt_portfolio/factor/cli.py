@@ -273,8 +273,17 @@ def _pipeline(args: argparse.Namespace) -> tuple[FactorPipeline, StrategyConfig]
     import opt_portfolio.factor.library  # noqa: F401
 
     config = load_strategy(args.config)
+    # 후보 유니버스를 미리 좁히지 않으면 패널이 (전 종목 × 전 거래일) 로
+    # 만들어진다. 전체 미장이면 22,000종목 × 7,000일 = 1.5억 셀 × 팩터 수라
+    # 15GB 머신에서는 OOM 으로 죽는다 (2026-08-12 실측). 유니버스 필터는
+    # 어차피 밴드 밖 종목을 버리므로, 로딩 단계에서 거르는 게 맞다.
+    tickers = _read_ticker_file(Path(args.tickers_file)) if args.tickers_file else None
+    if tickers:
+        print(f"후보 유니버스: {len(tickers)}종목 ({args.tickers_file})")
     with _open_existing(args.store) as store:
-        ctx = store.build_context(start=args.start, end=args.end, benchmark=config.benchmark)
+        ctx = store.build_context(
+            start=args.start, end=args.end, tickers=tickers, benchmark=config.benchmark
+        )
     return FactorPipeline(ctx), config
 
 
@@ -470,6 +479,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--start", default=None)
         p.add_argument("--end", default=None)
         p.add_argument("--out", default=None)
+        p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
         p.set_defaults(fn=fn)
 
     p = sub.add_parser("report", help="HTML 티어시트 생성")
@@ -489,6 +499,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--trials", type=int, default=24)
     p.add_argument("--min-train-years", type=float, default=5.0)
     p.add_argument("--embargo", type=int, default=21)
+    p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
     p.add_argument("--start", default=None)
     p.add_argument("--end", default=None)
     p.add_argument("--out", default=None)

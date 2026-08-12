@@ -475,8 +475,40 @@ def _drop_raw_close(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _csv_fundamentals(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    SF1 벌크 CSV → 정규화 + PIT 검증.
+
+    풀 히스토리 벌크에는 `datekey < reportperiod` 인 행이 극소수 섞여 있다
+    (2026-08-11 실측: 수백만 행 중 4건). 이 위반은 look-ahead 를 부르므로
+    적재해선 안 되지만, 4행 때문에 전량을 버리는 것도 과하다.
+
+    **버리는 방향이 안전한 방향이다** — 위반 행을 넣으면 없던 정보가
+    생기지만, 빼면 그 분기 하나가 없을 뿐이다. 그래서 제외하되 건수와
+    예시를 반드시 로그로 남긴다. 위반이 소수가 아니면(1% 초과) 벤더나
+    어댑터의 구조적 문제이므로 그때는 멈춘다.
+    """
     frame = df[df.get("dimension", DEFAULT_DIMENSION) == DEFAULT_DIMENSION]
     frame = normalize_columns(frame, "sharadar")
+
+    if {"datekey", "reportperiod"} <= set(frame.columns):
+        datekey = pd.to_datetime(frame["datekey"], errors="coerce")
+        report = pd.to_datetime(frame["reportperiod"], errors="coerce")
+        bad = (datekey < report).fillna(False)
+        if bad.any():
+            share = bad.mean()
+            sample = frame.loc[bad, ["ticker", "datekey", "reportperiod"]].head(3)
+            if share > 0.01:
+                raise ValueError(
+                    f"PIT 위반이 {share:.1%} 로 과다합니다 — 벤더/어댑터 구조 문제입니다\n{sample}"
+                )
+            logger.warning(
+                "PIT 위반 %d행 제외 (수신 %d행) — datekey < reportperiod:\n%s",
+                int(bad.sum()),
+                len(frame),
+                sample.to_string(index=False),
+            )
+            frame = frame.loc[~bad]
+
     validate_pit_frame(frame)
     return frame
 

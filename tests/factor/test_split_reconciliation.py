@@ -128,3 +128,27 @@ class TestEndToEnd:
         returns = closes.pct_change().dropna()
 
         assert (returns.abs() < 0.30).all(), f"경계에 가짜 수익률이 남았다: {list(returns)}"
+
+
+class TestNullKeyRows:
+    """
+    벤더 데이터에 키가 빈 행이 실재한다 (DAILY 벌크 CSV 300만 행당 약 44건).
+
+    NOT NULL 제약에 걸려 적재 전체가 죽거나, 조용히 사라지거나 둘 중
+    하나인데 둘 다 안 된다 — 걸러내되 반드시 로그를 남긴다.
+    """
+
+    def test_null_ticker_rows_are_dropped_with_warning(self, store: PITStore, caplog) -> None:
+        df = pd.DataFrame(
+            {
+                "ticker": ["AAPL", None],
+                "date": pd.to_datetime(["2024-01-02", "2024-01-02"]),
+                "close": [100.0, 50.0],
+            }
+        )
+
+        with caplog.at_level("WARNING"):
+            n = store.upsert_prices(df)
+
+        assert n == 1, "정상 행은 들어가야 한다"
+        assert "키 결측" in caplog.text, "조용히 버리면 안 된다"

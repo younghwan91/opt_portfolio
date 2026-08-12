@@ -71,6 +71,15 @@ class UniverseConfig:
     extra_ptp_tickers: tuple[str, ...] = ()
     smallcap_bottom_pct: float | None = None  # 0.2 → 시총 하위 20% 만
 
+    # 절대 시총 밴드 — "기관이 못 건드는 구간"의 조작적 정의.
+    # 상대 백분위(smallcap_bottom_pct)는 유니버스가 바뀌면 기준이 흔들린다
+    # (S&P500 하위 20% 는 여전히 수십억 달러다). 기관 접근 불가는 절대
+    # 규모의 문제이므로 밴드로 지정한다. 하한은 선택이 아니라 방어다 —
+    # Hou·Xue·Zhang(2020)이 보인 대로, 체결 불가능한 초소형이 극단 분위수를
+    # 채우면 균등가중 백테스트가 조용히 부풀려진다.
+    min_mcap_usd: float | None = None
+    max_mcap_usd: float | None = None
+
     # 실현 가능성 필터 (요청에 없지만 기본 on — 끄려면 명시적으로)
     min_price_usd: float = 5.0  # 수정 전 종가 기준
     min_adv_usd: float = 1_000_000.0  # 20일 평균 거래대금
@@ -82,6 +91,15 @@ class UniverseConfig:
     def __post_init__(self) -> None:
         if self.wics_industries and self.sectors:
             raise ValueError("wics_industries 와 sectors 는 동시 지정 불가")
+        if (
+            self.min_mcap_usd is not None
+            and self.max_mcap_usd is not None
+            and self.min_mcap_usd > self.max_mcap_usd
+        ):
+            raise ValueError(
+                f"min_mcap_usd({self.min_mcap_usd:,.0f}) 가 "
+                f"max_mcap_usd({self.max_mcap_usd:,.0f}) 보다 큽니다 — 빈 유니버스가 됩니다"
+            )
 
 
 def build_universe(ctx: PanelContext, config: UniverseConfig) -> pd.DataFrame:
@@ -103,6 +121,13 @@ def build_universe(ctx: PanelContext, config: UniverseConfig) -> pd.DataFrame:
     if config.min_adv_usd > 0 and "volume" in ctx.daily:
         adv = (ctx.daily["volume"] * close).rolling(20, min_periods=5).mean()
         mask &= adv >= config.min_adv_usd
+
+    if (config.min_mcap_usd is not None or config.max_mcap_usd is not None) and "mcap" in ctx.daily:
+        mcap = ctx.daily["mcap"]
+        if config.min_mcap_usd is not None:
+            mask &= mcap >= config.min_mcap_usd
+        if config.max_mcap_usd is not None:
+            mask &= mcap <= config.max_mcap_usd
 
     if config.smallcap_bottom_pct is not None and "mcap" in ctx.daily:
         pct_rank = ctx.daily["mcap"].rank(axis=1, pct=True)
