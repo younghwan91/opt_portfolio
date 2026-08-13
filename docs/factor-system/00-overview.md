@@ -370,6 +370,7 @@ src/opt_portfolio/
 - `04-data-contract.md` — 스토어 스키마 · PIT 불변식 · **벤더 API 실측** · 운영 절차
 - `05-math-spec.md` — **검증·최적화·정산 프로토콜** (체결 규약, walk-forward PO, DSR/PBO)
 - `06-provider-review.md` — 프로바이더 전수 조사 · 티어별 필요 Sharpe · 채택 근거
+- `07-experiment-log.md` — **실험 기록** · 채택 전략 · 기각 목록 · 재현 절차
 
 > ⚠️ 본 문서 §2 의 데이터 소스 서술은 **구독 전 추정**으로 쓰였다.
 > 실계정으로 검증된 API 형태·티어별 유니버스/히스토리·벤더 컬럼 함정은

@@ -43,6 +43,17 @@ class BacktestConfig:
     cost: CostModel = field(default_factory=CostModel)
     ir_scale: float = 0.03  # MVO/BL 전용
     view_confidence: float = 0.5  # BL 전용
+    #: 매매 유예구간. 상위 n_stocks 안에 들면 사고, n_stocks×hold_multiple
+    #: 밖으로 밀려야 판다. 1.0 이면 밴드 없음(매 리밸런싱 상위 N 재선정).
+    #: 순위가 문턱 근처에서 진동하는 종목을 반복 매매하는 낭비를 없앤다.
+    hold_multiple: float = 1.0
+
+    def __post_init__(self) -> None:
+        if self.hold_multiple < 1.0:
+            raise ValueError(
+                f"hold_multiple 은 1.0 이상이어야 합니다 (받은 값 {self.hold_multiple}). "
+                "청산 문턱이 진입보다 좁으면 밴드가 아니라 잡음이 된다."
+            )
 
 
 @dataclass
@@ -139,10 +150,19 @@ def run_backtest(
     turnover_log: dict[pd.Timestamp, float] = {}
     current_w = pd.Series(dtype=float)  # 직전 세그먼트 종료 시점의 드리프트 비중
 
+    held: pd.Index = pd.Index([])  # 직전 리밸런싱에서 담은 종목 (밴드 판정용)
+
     for i, signal_date in enumerate(rb_dates):
-        selected = _select(scores, close, universe, signal_date, config.n_stocks)
+        # 밴드를 적용하려면 후보를 넉넉히 뽑아야 한다 — n 만 뽑으면 밴드 안에
+        # 남아 있는 보유 종목이 후보에서 이미 잘려 나간다.
+        pool_size = max(config.n_stocks, int(config.n_stocks * config.hold_multiple))
+        pool = _select(scores, close, universe, signal_date, pool_size)
+        if pool.empty:
+            continue
+        selected = select_with_band(pool, held, config.n_stocks, config.hold_multiple)
         if selected.empty:
             continue
+        held = selected.index
 
         new_w = _weights_for(selected, rets, market_caps, signal_date, config)
 
@@ -186,6 +206,32 @@ def run_backtest(
 
 
 # ------------------------------------------------------------------ 내부
+
+
+def select_with_band(
+    row: pd.Series,
+    held: list[str] | pd.Index,
+    n: int,
+    hold_multiple: float = 1.0,
+) -> pd.Series:
+    """
+    매매 유예구간을 적용한 상위 n 선정.
+
+    보유 종목은 n×hold_multiple 위 안에 있으면 유지하고, 남는 자리를
+    상위 신규 종목으로 채운다. `hold_multiple=1.0` 이면 단순 상위 n 이다.
+    """
+    if hold_multiple <= 1.0 or len(held) == 0:
+        return row.nlargest(n)
+
+    keep_rank = int(round(n * hold_multiple))
+    incumbents = row.nlargest(keep_rank).index.intersection(pd.Index(held))
+    incumbents = incumbents[:n]  # 정원 초과 시 스코어 높은 쪽 우선
+
+    slots = n - len(incumbents)
+    if slots <= 0:
+        return row.loc[incumbents]
+    challengers = row.drop(index=incumbents, errors="ignore").nlargest(slots)
+    return row.loc[incumbents.union(challengers.index)].sort_values(ascending=False)
 
 
 def _select(
