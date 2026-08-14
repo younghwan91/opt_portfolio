@@ -295,6 +295,7 @@ class FactorPipeline:
             universe=self.universe(config.universe),
             market_caps=self.ctx.daily.get("mcap"),
             exposure=self.exposure(config),
+            sectors=self.ctx.meta.get("sector"),
             start=pd.Timestamp(start) if start else None,
             end=pd.Timestamp(end) if end else None,
         )
@@ -346,6 +347,7 @@ class FactorPipeline:
                 universe=universe_mask,
                 market_caps=mcap,
                 exposure=exposure,
+                sectors=self.ctx.meta.get("sector"),
                 start=start,
                 end=end,
             )

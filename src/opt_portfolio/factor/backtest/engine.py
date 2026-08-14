@@ -25,7 +25,7 @@ import pandas as pd
 
 from opt_portfolio.config import RISK_FREE_RATE
 from opt_portfolio.factor.backtest.costs import CostModel
-from opt_portfolio.factor.portfolio.weights import compute_weights
+from opt_portfolio.factor.portfolio.weights import cap_sector_weights, compute_weights
 
 #: 공분산 기반 비중 스킴이 요구하는 최소 트레일링 관측 일수
 MIN_COV_OBS = 60
@@ -43,6 +43,9 @@ class BacktestConfig:
     cost: CostModel = field(default_factory=CostModel)
     ir_scale: float = 0.03  # MVO/BL 전용
     view_confidence: float = 0.5  # BL 전용
+    #: 섹터 비중 상한. 1.0 이면 제약 없음. 팩터를 섹터 중립화해도 상위 N
+    #: 선정 결과는 한 섹터에 몰릴 수 있고, 그건 의도하지 않은 매크로 베팅이다.
+    max_sector_weight: float = 1.0
     #: 매매 유예구간. 상위 n_stocks 안에 들면 사고, n_stocks×hold_multiple
     #: 밖으로 밀려야 판다. 1.0 이면 밴드 없음(매 리밸런싱 상위 N 재선정).
     #: 순위가 문턱 근처에서 진동하는 종목을 반복 매매하는 낭비를 없앤다.
@@ -112,6 +115,7 @@ def run_backtest(
     universe: pd.DataFrame | None = None,
     market_caps: pd.DataFrame | None = None,
     exposure: pd.Series | None = None,
+    sectors: pd.Series | None = None,
     start: pd.Timestamp | None = None,
     end: pd.Timestamp | None = None,
 ) -> BacktestResult:
@@ -164,7 +168,7 @@ def run_backtest(
             continue
         held = selected.index
 
-        new_w = _weights_for(selected, rets, market_caps, signal_date, config)
+        new_w = _weights_for(selected, rets, market_caps, signal_date, config, sectors)
 
         # 체결일: 신호 다음 거래일
         pos = calendar.searchsorted(signal_date) + 1
@@ -267,6 +271,7 @@ def _weights_for(
     market_caps: pd.DataFrame | None,
     date: pd.Timestamp,
     config: BacktestConfig,
+    sectors: pd.Series | None = None,
 ) -> pd.Series:
     names = selected.index
     window = rets.loc[:date, names].tail(config.cov_window)
@@ -287,7 +292,7 @@ def _weights_for(
     if scheme == "black_litterman":
         kwargs["view_confidence"] = config.view_confidence
 
-    return (
+    weights = (
         compute_weights(
             scheme,
             window.dropna(how="any"),
@@ -299,6 +304,11 @@ def _weights_for(
         .reindex(names)
         .fillna(1.0 / len(names) if scheme == "equal" else 0.0)
     )
+    # 섹터 상한은 비중 스킴과 무관하게 마지막에 적용한다 — 어떤 스킴을 쓰든
+    # 쏠림은 같은 방식으로 막아야 한다.
+    if config.max_sector_weight < 1.0 and sectors is not None:
+        weights = cap_sector_weights(weights, sectors, config.max_sector_weight)
+    return weights
 
 
 def _drift_segment(

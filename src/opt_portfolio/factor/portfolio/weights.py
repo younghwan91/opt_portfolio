@@ -331,3 +331,50 @@ def compute_weights(
             returns, scores, market_caps=market_caps, max_weight=max_weight, **kwargs
         )
     return cap_and_normalize(w, max_weight)
+
+
+def cap_sector_weights(
+    weights: pd.Series,
+    sectors: pd.Series,
+    max_sector_weight: float,
+) -> pd.Series:
+    """
+    섹터 비중 상한 — water-filling 을 섹터 단위로 적용한다.
+
+    `neutralize=("sector",)` 는 **스코어**에서 섹터 효과를 뺀다. 그러나 상위 N을
+    고르고 나면 결과가 한 섹터에 몰릴 수 있고, 그건 팩터 베팅이 아니라
+    **의도하지 않은 매크로 베팅**이다 — 금리가 움직이면 그 하나로 성과가
+    결정된다. 실측: 채택 전략 보유 19종목 중 6종목(32%)이 Technology 였다.
+
+    섹터를 자르되 **그 안의 상대 비중은 유지한다** — 스코어 순서를 뒤집지
+    않기 위해서다. 섹터 수 × 상한 < 1 이라 만족이 불가능하면 원본을 그대로
+    돌려준다 (조용히 이상한 값을 내지 않는다). 섹터 미상 종목은 각각을
+    독립 버킷으로 본다 — 한 덩어리로 묶어 잘라내면 근거 없는 제약이 된다.
+    """
+    if max_sector_weight >= 1.0 or weights.empty:
+        return weights
+
+    labels = sectors.reindex(weights.index)
+    unknown = labels.isna()
+    # 섹터 미상은 각자 고유 라벨을 주어 서로 묶이지 않게 한다
+    labels = labels.astype(object).where(~unknown, pd.Series(weights.index, index=weights.index))
+
+    if labels.nunique() * max_sector_weight < 1.0 - 1e-9:
+        return weights  # 만족 불가능한 상한 — 원본 유지
+
+    w = weights.clip(lower=0.0)
+    w = w / w.sum() if w.sum() > 0 else pd.Series(1.0 / len(w), index=w.index)
+
+    for _ in range(64):
+        totals = w.groupby(labels).transform("sum")
+        over = totals > max_sector_weight + 1e-12
+        if not over.any():
+            break
+        # 초과 섹터는 상한까지 비례 축소, 그 몫을 나머지에 비례 배분
+        w = w.where(~over, w * max_sector_weight / totals)
+        slack = 1.0 - w.sum()
+        free = ~over & (w > 0)
+        if slack <= 1e-12 or not free.any():
+            break
+        w = w.where(~free, w + slack * w / w[free].sum())
+    return w / w.sum()
