@@ -466,6 +466,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         min_train_years=args.min_train_years,
         embargo_days=args.embargo,
         train_window_years=args.train_window,
+        ensemble_k=args.ensemble,
     )
     print(f"폴드 수:          {len(result.folds)}")
     print(f"총 시도:          {result.n_trials_total}")
@@ -591,6 +592,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--tickers-file", default=None, help="후보 유니버스 — 패널 크기를 줄인다")
     p.add_argument("--objective", default="sharpe", choices=["sharpe", "calmar"])
+    p.add_argument(
+        "--ensemble",
+        type=int,
+        default=1,
+        help="상위 k개 파라미터의 검증 수익률을 평균 (1 = 최적값 하나)",
+    )
     p.add_argument("--start", default=None)
     p.add_argument("--end", default=None)
     p.add_argument("--out", default=None)

@@ -205,6 +205,24 @@ OBJECTIVES: dict[str, Callable[[pd.Series], float]] = {
 }
 
 
+def top_k_params(result: SearchResult, k: int = 1) -> list[Params]:
+    """
+    탐색 결과에서 상위 k개 파라미터.
+
+    폴드마다 '최적값 하나'를 쓰면 그 선택 오차를 검증 구간 전체가 떠안는다.
+    실측에서 `n_stocks` 가 폴드에 따라 15↔47 로 널뛰었는데, 목적함수가 거의
+    같은 조합 중 하나를 고르는 것은 동전던지기다 — 여러 번 던져 평균 내는
+    편이 낫다.
+
+    -inf 는 탐색에서 도태된 조합(관측 부족 등)이므로 제외한다.
+    """
+    finite = [t for t in result.trials if np.isfinite(t.objective)]
+    if not finite:
+        return [result.best_params]
+    ranked = sorted(finite, key=lambda t: t.objective, reverse=True)
+    return [t.params for t in ranked[:k]]
+
+
 def run_walk_forward(
     evaluate: Evaluator,
     space: ParamSpace,
@@ -217,6 +235,7 @@ def run_walk_forward(
     test_months: int = 12,
     embargo_days: int = 21,
     train_window_years: float | None = None,
+    ensemble_k: int = 1,
     seed: int = 0,
 ) -> WalkForwardResult:
     """
@@ -271,7 +290,12 @@ def run_walk_forward(
         )
         searches.append(result)
         chosen.append(result.best_params)
-        oos_parts.append(call(result.best_params, fold.test_start, fold.test_end, fold.train_end))
+        # 상위 k개 파라미터의 검증 수익률을 평균 — k=1 이면 기존 동작 그대로다.
+        picked = top_k_params(result, ensemble_k)
+        members = [call(p, fold.test_start, fold.test_end, fold.train_end) for p in picked]
+        oos_parts.append(
+            members[0] if len(members) == 1 else pd.concat(members, axis=1).mean(axis=1)
+        )
         # 폴드 단위 진행 로그 — 풀 히스토리에서는 한 번 돌리는 데 시간 단위가
         # 걸린다. 진행률이 없으면 멈춘 것인지 도는 중인지 구분할 수 없다.
         logger.info(
