@@ -388,6 +388,7 @@ class PITStore:
         end: str | pd.Timestamp | None = None,
         tickers: list[str] | None = None,
         benchmark: str | None = None,
+        price_fields: tuple[str, ...] | None = None,
     ) -> PanelContext:
         """
         저장소 → PanelContext.
@@ -395,6 +396,9 @@ class PITStore:
         Args:
             benchmark: 지정 시 해당 티커의 일별 수익률을
                 meta['benchmark_return'] 으로 넣는다 (베타 팩터·타이밍용).
+            price_fields: 실을 일별 필드. None 이면 전부.
+                패널 하나가 6,895종목 × 7,190일 기준 약 400MB 이므로,
+                안 쓰는 필드를 싣는 것만으로 GB 단위가 낭비된다.
         """
         quarterly: dict[str, pd.DataFrame] = {}
         avail_by_source: dict[str, pd.DataFrame] = {}
@@ -421,7 +425,7 @@ class PITStore:
         if est_avail is not None:
             avail_by_source["FMP"] = est_avail
 
-        daily = self._load_prices(start, end, tickers)
+        daily = self._load_prices(start, end, tickers, price_fields)
         meta = self._load_meta()
 
         calendar = None
@@ -474,6 +478,7 @@ class PITStore:
         start: str | pd.Timestamp | None,
         end: str | pd.Timestamp | None,
         tickers: list[str] | None,
+        fields: tuple[str, ...] | None = None,
     ) -> dict[str, pd.DataFrame]:
         clauses, params = [], []
         if tickers:
@@ -487,14 +492,21 @@ class PITStore:
             params.append(str(pd.Timestamp(end).date()))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
-        raw = self.conn.execute(f"SELECT * FROM prices {where} ORDER BY date", params).df()
+        # 필드 선택은 **SQL 단계에서** 한다. SELECT * 로 전부 읽은 뒤 버리면
+        # 피크 메모리가 그대로다 — 6,895종목 15M행 × 10컬럼을 먼저 물리면
+        # 피벗 전에 이미 수 GB 다. 이 순서 때문에 OOM 이 났다 (2026-08-15).
+        wanted = PRICE_FIELDS if fields is None else [f for f in PRICE_FIELDS if f in fields]
+        cols = ", ".join(f'"{c}"' for c in ["ticker", "date", *wanted])
+        raw = self.conn.execute(
+            f"SELECT {cols} FROM prices {where} ORDER BY date",  # noqa: S608 (컬럼명은 화이트리스트)
+            params,
+        ).df()
         if raw.empty:
             return {}
         raw["date"] = pd.to_datetime(raw["date"])
-
         return {
             f: raw.pivot_table(index="date", columns="ticker", values=f, aggfunc="first")
-            for f in PRICE_FIELDS
+            for f in wanted
             if f in raw.columns and raw[f].notna().any()
         }
 

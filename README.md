@@ -1,163 +1,274 @@
 # opt_portfolio
 
-**Vigilant Asset Allocation(VAA) 기반 전술적 자산배분 백테스트·최적화 시스템.**
+**English** · [한국어](README.ko.md)
+
+**US equity factor engine + tactical asset allocation (VAA) backtester.**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-younghwan--chae-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/younghwan-chae/)
 
-매월 모멘텀 신호로 ETF를 동적으로 갈아타는 VAA 전략을 구현하고, 비중을 Sharpe 비율 기준으로 최적화한다. 백테스트·리스크 분석·예측 모듈을 함께 제공한다.
+Two independent subsystems live in this repository.
 
-> VAA는 Wouter Keller가 발표한 공개 전략이다. 이 레포의 초점은 "비법 전략"이 아니라, **공개된 전술적 자산배분 규칙을 정확히 구현하고 walk-forward로 정직하게 검증하는 파이프라인**에 있다.
+| | **Factor engine** (`factor/`) | **VAA allocation** (`strategies/`·`analysis/`) |
+|---|---|---|
+| Scope | US single stocks (up to 21,962 tickers) | 7–11 ETFs |
+| Question | Which stocks to buy | Which asset class to rotate into |
+| Data | Sharadar direct (point-in-time, delisted included) | yfinance daily closes |
+| Entry point | `opt-factor` · `opt-factor-tui` | `make run` · `run.py` |
+
+**The two are fully isolated at the code level** — neither imports the other; the only shared symbol is `config.RISK_FREE_RATE`.
 
 ---
 
-## 방법론
+# 1. Factor engine
 
-### 모멘텀 점수 (Keller 13612)
+A cross-sectional US equity factor engine built so that results can be **trusted, not just produced**.
+One design principle drives everything: **never fail silently.**
 
-각 자산의 모멘텀을 기간 가중합으로 계산한다.
+## Why this engine
+
+Quant backtests fail in a small number of well-known ways. Each one is blocked structurally here.
+
+| Common failure | How it is prevented |
+|---|---|
+| **Survivorship bias** — only today's survivors are in the sample | Delisted names retained (Enron, old American Airlines, Ambac verified present) |
+| **Look-ahead** — using numbers before they were public | Expressions cannot touch raw tables; everything passes through `PanelContext`, which enforces `datekey` alignment |
+| **Restatement contamination** — using revised figures | **First print wins** — only the number the market originally saw is stored |
+| **Silent truncation** — partial data reported as success | Pagination raises `TruncatedDataError` when the expected range isn't reached |
+| **Overfitting** — run hundreds of variants, report the best | **Deflated Sharpe Ratio** + **PBO** charge for the number of trials |
+| **In-sample performance reporting** | Official performance is **walk-forward only**; single backtests are labelled reference-only |
+
+## Performance — 18.6 years out-of-sample
+
+Currently adopted strategy (US small caps, 8 factors + 200-day moving-average timing overlay):
+
+| Metric | Value |
+|---|---|
+| CAGR | **16.90%** |
+| Max drawdown | **−23.7%** |
+| Sharpe | 0.756 |
+| Calmar | 0.71 |
+| **Deflated Sharpe** | **0.992** (gate: 0.95) |
+
+**The Deflated Sharpe is the number that matters here.** It subtracts the maximum Sharpe you would expect from pure noise given how many variants were tried (57), leaving what is actually left over. A strategy that cannot clear 0.95 is not adopted — more than twenty candidates were rejected at this gate in this repository.
+
+The full record is in [`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md) (Korean).
+
+## Factor library — 158 factors
+
+Factors are not written as 158 functions. A **declarative expression DSL** generates TTM / QoQ / YoY / acceleration variants automatically.
+
+```python
+from opt_portfolio.factor.dsl.expr import F
+from opt_portfolio.factor.dsl.registry import factor
+
+# Cash-based operating profitability (Ball, Gerakos, Linnainmaa & Nikolaev 2016)
+CBOP = factor(
+    "CBOP",
+    (F.gp - _delta(F.receivables) - _delta(F.inventory) + _delta(F.liabilitiesc)) / F.assets,
+    category="quality",
+    direction=1,
+    neutralize=("sector",),   # cross-sectional sector neutralisation
+)
+```
+
+| Category | Count | Examples |
+|---|---|---|
+| quality | 55 | GP/A, ROIC, F-Score, accruals, net operating assets |
+| growth | 26 | Revenue / earnings YoY & QoQ |
+| price | 24 | Momentum 1/3/6/12M, 12-1, low volatility |
+| value_price | 24 | P/E, P/B, P/S, P/FCF, P/GP |
+| acceleration | 15 | Second derivative of growth |
+| value_ev | 9 | EV/EBITDA, EV/GP |
+| flow_proxy | 5 | 13F institutional change, insider net buying |
+
+Only factors with a documented rationale are included — Novy-Marx (2013), Sloan (1996), Hirshleifer et al. (2004), Daniel & Titman (2006), Ball et al. (2016), plus replications from the Chen & Zimmermann open-source asset pricing library.
+
+## Usage
+
+> **Data requirement.** The factor engine needs a [Sharadar](https://sharadar.com) subscription (Bundle, from $29/mo) — it is the only retail-priced source that provides point-in-time fundamentals *and* delisted coverage together. Without it the engine runs but has nothing to run on. The vendor adapter is isolated behind a neutral `Provider` protocol, so swapping in another source means rewriting one file. The VAA subsystem uses free yfinance data and needs no subscription.
+
+```bash
+# Ingest data (Sharadar subscription required)
+export SHARADAR_API_KEY=...
+opt-factor ingest --store us.duckdb --provider sharadar \
+  --tables sf1,sep,daily,actions,sp500,tickers --tickers-file universe.txt
+
+# Screen factor predictive power — decile spread, IC, turnover
+uv run python scripts/factor_lab.py --store us.duckdb --factors GP_A,PER,SIZE
+
+# Official performance (walk-forward + Deflated Sharpe)
+opt-factor optimize --store us.duckdb \
+  --config configs/strategy_quantus_timed.json \
+  --space configs/space_small.json --objective calmar
+
+# What to buy today (pass current holdings to get a trade plan)
+opt-factor holdings --store us.duckdb \
+  --config configs/strategy_quantus_timed.json --current my_holdings.csv
+
+# Operating console
+opt-factor-tui --store us.duckdb --config configs/strategy_quantus_timed.json
+```
+
+A strategy is fully declared by one JSON file.
+
+```jsonc
+{
+  "factors": ["PER", "PSR", "POR", "PGPR",
+              "NETINC_GROWTH_YOY", "OPINC_GROWTH_YOY",
+              "GP_GROWTH_YOY", "REVENUE_GROWTH_YOY"],
+  "universe": {
+    "min_mcap_usd": 5000000, "max_mcap_usd": 80000000,
+    "exclude_financials": true, "exclude_distressed": true
+  },
+  "backtest": {
+    "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
+    "hold_multiple": 1.0,                      // no-trade band
+    "cost": {"commission_bps": 50, "slippage_bps": 0}
+  },
+  "timing_ma_days": 200,                       // market-timing overlay
+  "select_top_k": 0                            // >0 selects factors inside the training window
+}
+```
+
+## Validation tooling
+
+| Tool | Question it answers |
+|---|---|
+| `scripts/factor_lab.py` | Does this factor predict anything? (decile spread · monotonicity · turnover) |
+| `research/ic.py` | Rank IC · IC-IR · decay profile |
+| `research/overfitting.py` | **Is this result luck?** — Deflated Sharpe · PBO (CSCV) |
+| `research/regime.py` | In which market state does it work? (trend × volatility, 2×2) |
+| `research/selection.py` | Factor selection inside the training window — the honest form of combination search |
+| `optimize/walkforward.py` | Expanding/rolling windows, embargo, per-fold parameter stability |
+
+Seven weighting schemes ship: equal · market-cap · inverse-volatility · risk parity · HRP · mean-variance · Black-Litterman.
+**Empirically, equal weighting wins here** — the DeMiguel et al. (2009) 1/N result reproduced twice in this repository's tests.
+
+---
+
+# 2. VAA allocation
+
+An implementation of Wouter Keller's Vigilant Asset Allocation, validated walk-forward.
+
+### Momentum score (Keller 13612)
 
 ```
 momentum = 12·R(1M) + 4·R(3M) + 2·R(6M) + 1·R(12M)
 ```
 
-최근 수익률에 더 큰 가중치를 둬 추세 전환에 민감하게 반응한다.
+### Selection rule
 
-### VAA 선택 규칙
+- Pick the top-momentum asset from the **offensive universe** (`SPY`, `EFA`, `EEM`, `AGG`).
+- If **any** offensive asset shows negative absolute momentum, treat it as a risk-off signal and rotate to the top of the **defensive universe** (`LQD`, `IEF`, `SHY`).
+- 50% to the VAA selection, 12.5% each to the core sleeve (`SPY`, `TLT`, `GLD`, `BIL`) — configurable.
 
-- **공격 유니버스**(`SPY`, `EFA`, `EEM`, `AGG`) 중 모멘텀 1위 자산을 선택한다.
-- 단, 공격 자산 중 **하나라도 절대 모멘텀이 음수**면 위험 회피 신호로 보고, **방어 유니버스**(`LQD`, `IEF`, `SHY`) 중 모멘텀 1위로 전환한다.
-- 이렇게 고른 ETF에 50%, 코어 자산(`SPY`, `TLT`, `GLD`, `BIL`)에 각 12.5%를 배분한다(Keller 기반 기본값, 조정 가능).
+### Results
 
-### 비중 최적화
+![15-year VAA comparison](backtest_comparison.png)
 
-VAA 선택분 20–70%, 코어 자산 각 5–35% 범위를 그리드 서치로 훑어 **Sharpe 비율이 최대가 되는 조합**을 찾는다.
+2011–2026, $10,000 initial. Standard VAA (`Current`) reaches ~$29k versus ~$24–27k for the OU-forecast variants — **adding a prediction layer did not help.**
 
-### 백테스트 / 리스크
+```bash
+make run                     # interactive menu
+python3 run.py --backtest    # dynamic VAA backtest
+python3 run.py --optimize    # Sharpe-based weight optimisation
+```
 
-- **월간 walk-forward** 시뮬레이션, **거래비용 0.1%** 반영 → 결과는 net 기준.
-- 리스크 지표: Sharpe, Sortino, 최대 낙폭(MDD), VaR/CVaR, 베타, 트래킹 에러.
-- 무위험 수익률 5% 가정(2025 기준).
-- `ou_process.py`는 Ornstein-Uhlenbeck 평균회귀로 모멘텀을 예측하는 실험적 변형이다.
+---
 
-### 자산 유니버스
-
-| 구분 | 티커 | 역할 |
-|---|---|---|
-| 공격(aggressive) | SPY, EFA, EEM, AGG | 위험 선호 구간에서 모멘텀 추종 |
-| 방어(protective) | LQD, IEF, SHY | 위험 회피 신호 시 전환 |
-| 코어(core) | SPY, TLT, GLD, BIL | 고정 분산 배분 |
-
-## 백테스트 결과
-
-![15년 VAA 전략 비교](backtest_comparison.png)
-
-2011–2026년 15년 구간, 초기 $10,000 기준 비교다. `Current`는 표준 VAA 모멘텀 로직, `Forecast_1M/3M/6M`은 OU 예측을 끼운 변형이다.
-
-- 표준 VAA(`Current`)가 ~$29k로 OU 예측 변형들(~$24–27k)을 **앞선다.** 예측 레이어를 더한다고 나아지지 않았다 — 단순한 규칙이 이긴 셈.
-- 2018·2022 같은 하락 구간에서 방어 전환이 낙폭을 줄였다.
-
-> ⚠️ 백테스트는 과거 데이터 기준이며 미래 수익을 보장하지 않는다. 한계는 [아래](#한계와-가정) 참고.
-
-## 구조
-
-레이어로 관심사를 나눴다.
+## Layout
 
 ```
 src/opt_portfolio/
-├── strategies/        # 전략
-│   ├── momentum.py    #   Keller 13612 모멘텀
-│   ├── vaa.py         #   공격/방어 유니버스 선택 + 방어 전환
-│   └── ou_process.py  #   OU 평균회귀 예측 (실험적)
-├── analysis/          # 분석
-│   ├── backtest.py    #   월간 walk-forward + 거래비용
-│   ├── optimizer.py   #   Sharpe 그리드 서치
-│   ├── risk.py        #   Sharpe/Sortino/MDD/VaR/CVaR/beta
-│   └── performance.py #   CAGR, 롤링 수익률, 성과 기여도
-├── core/
-│   ├── cache.py       #   DuckDB 증분 캐시 (없는 구간만 yfinance 호출)
-│   └── portfolio.py   #   포지션·거래·리밸런싱
-├── ui/
-│   └── cli.py            # 터미널 메뉴
-└── config.py          # frozen dataclass 설정 (싱글턴)
+├── factor/                    # US equity factor engine
+│   ├── data/                  #   vendor adapters · PIT store (DuckDB)
+│   ├── dsl/                   #   expression tree · PIT context · registry
+│   ├── library/               #   158 factor declarations
+│   ├── universe/              #   liquidity, market-cap, sector filters
+│   ├── portfolio/             #   score blending · 7 weighting schemes · shrinkage covariance
+│   ├── backtest/              #   cross-sectional backtest · costs · market timing
+│   ├── optimize/              #   walk-forward · grid/random/GP-EI search
+│   ├── research/              #   IC · quantiles · DSR/PBO · regimes · factor selection
+│   ├── holdings.py            #   today's picks · trade plan
+│   └── tui.py                 #   operating console
+├── strategies/                # VAA — momentum · asset selection · OU forecast (experimental)
+├── analysis/                  # backtest · optimiser · risk · performance
+├── core/                      # DuckDB incremental cache · positions
+└── config.py                  # frozen dataclass settings
 ```
 
-## 설치 & 실행
+## Install & develop
 
 ```bash
 make install        # uv sync --extra dev
-
-make run            # 인터랙티브 메뉴
-python3 run.py --backtest    # 동적 VAA 백테스트
-python3 run.py --optimize    # Sharpe 비중 최적화
-```
-
-코드로 직접 다룰 때:
-
-```python
-from opt_portfolio.analysis.backtest import BacktestEngine
-
-engine = BacktestEngine()
-
-# 기본 비중으로 15년 백테스트
-result = engine.run_dynamic_vaa_backtest(years=15)
-print(result.sharpe_ratio, result.cagr, result.max_drawdown)
-print(result.get_selection_summary())   # 월별 VAA 선택 분포
-
-# 커스텀 비중 (합 = 1.0)
-weights = {"VAA": 0.45, "SPY": 0.15, "TLT": 0.20, "GLD": 0.10, "BIL": 0.10}
-result = engine.run_dynamic_vaa_backtest(years=15, allocation_weights=weights)
-```
-
-## 한계와 가정
-
-- **과적합** — 최적화 비중은 in-sample 구간에 맞춰진 값이다. 새로운 구간(out-of-sample)에서는 성과가 떨어질 수 있다. 최적값을 그대로 신뢰하기보다 강건성(robustness)을 함께 봐야 한다.
-- **거래비용 단순화** — 0.1% 고정. 실제 스프레드·세금·체결 슬리피지는 반영하지 않는다.
-- **데이터** — yfinance(야후 파이낸스) 일간 종가 기준. 배당 처리·생존 편향 등은 데이터 소스에 의존한다.
-- **무위험 수익률 고정** — 5%로 가정. 구간별 금리 변화는 반영하지 않는다.
-- **표본 구간** — 단일 15년 윈도우. 레짐별 강건성 검증은 별도로 필요하다.
-
-## 개발
-
-```bash
-make test           # pytest + 커버리지
+make test           # pytest + coverage (254 tests)
 make lint           # ruff check + format --check
 make typecheck      # mypy src/
 ```
 
-브랜치 전략: `develop`(기능 통합, squash merge) → `main`(안정 릴리즈) PR.
+Dependencies are managed with **uv** (`uv.lock`). Do not use `pip install`.
 
-## 라이선스
+## Documentation
+
+Design documents are written in Korean and live in [`docs/factor-system/`](docs/factor-system/).
+
+| File | Contents |
+|---|---|
+| `00-overview.md` | Design overview · data source rationale |
+| `01-factor-spec.md` | Factor definitions |
+| `02-universe-spec.md` | Universe filters |
+| `04-data-contract.md` | **Store schema · PIT rules · vendor measurements · operating procedure** |
+| `05-math-spec.md` | Weighting, backtest and walk-forward mathematics |
+| `06-provider-review.md` | Comparison of 12 data vendors |
+| `07-experiment-log.md` | **Experiment log — adopted strategy · rejection list · reproduction steps** |
+
+## Limitations
+
+**Factor engine**
+
+- The **micro-cap universe** carries wide bid-ask spreads. The backtest assumes 0.5% commission and zero slippage — *that assumption is not data.*
+- **Capacity is limited.** Switching to value weighting cuts Sharpe by 28%, which means the alpha sits in small names. The result will not survive at institutional size.
+- **Factor selection is not charged to the Deflated Sharpe trial count.** Screening 124 factors and picking a handful is itself a search (`research/selection.py` exists to repay this debt).
+- Taxes are not modelled.
+
+**VAA**
+
+- Optimised weights are in-sample; robustness must be checked separately.
+- Fixed 0.1% transaction cost, yfinance daily closes, 5% risk-free assumption, single 15-year window.
+
+> ⚠️ All backtests are historical and do not guarantee future returns.
+
+## License
 
 MIT
 
-
 ---
 
-## ⭐ 도움이 되셨다면
+## ⭐ If this helped
 
-이 프로젝트가 유용했다면 우측 상단 **[⭐ Star](https://github.com/younghwan91/opt_portfolio)** 를 눌러주세요. 검색·추천 노출이 올라가 더 많은 분들이 찾을 수 있습니다.
+If you found this useful, please **[⭐ Star](https://github.com/younghwan91/opt_portfolio)** the repository — it improves discoverability for others looking for the same thing.
 
-- 🐛 버그·질문 → [Issues](https://github.com/younghwan91/opt_portfolio/issues)
-- 📈 업데이트 소식 → [팔로우 @younghwan91](https://github.com/younghwan91)
+- 🐛 Bugs & questions → [Issues](https://github.com/younghwan91/opt_portfolio/issues)
+- 📈 Updates → [Follow @younghwan91](https://github.com/younghwan91)
 
-## 관련 프로젝트 — 한국 주식 퀀트 스택
+## Related projects — Korean equity quant stack
 
-시세·펀더멘탈·뉴스 수집 REST API부터 데이터 파이프라인, 백테스트·알파 리서치까지 이어지는 오픈소스 스택의 일부입니다.
+Part of an open-source stack spanning market/fundamental/news collection APIs, data pipelines, backtesting and alpha research.
 
-| 프로젝트 | 설명 |
+| Project | Description |
 |---|---|
-| **[kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)** | 키움증권 REST API Python 라이브러리 — 207개 엔드포인트 + 실시간 WebSocket |
-| **[krx-fundamentals-api](https://github.com/younghwan91/krx-fundamentals-api)** | 국내 기업 펀더멘탈 REST API — 재무제표·투자지표·배당·종목 스크리닝 (DART + KRX + 네이버) |
-| **[krx-news-rest-api](https://github.com/younghwan91/krx-news-rest-api)** | 한국 주식 뉴스·공시 수집 REST API (FastAPI + Redis) |
-| **[kr-quant-airflow](https://github.com/younghwan91/kr-quant-airflow)** | 시세·수급·실적 데이터를 TimescaleDB로 수집하는 Airflow 파이프라인 |
-| **[kr-quant](https://github.com/younghwan91/kr-quant)** | 코스피·코스닥 알파 리서치 — walk-forward·랜덤 음성대조를 강제하는 검증 가드레일 |
-| **[quantbox-engine](https://github.com/younghwan91/quantbox-engine)** | 암호화폐 선물 백테스트·실행 엔진 — 룩어헤드 0, 백테스트↔실거래 일체화 |
-| **[automated-stock-trading-systems](https://github.com/younghwan91/automated-stock-trading-systems)** | Bensdorp의 7개 비상관 트레이딩 시스템 백테스터 (교육용 재구현) |
+| **[kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)** | Kiwoom Securities REST API Python client — 207 endpoints + real-time WebSocket |
+| **[krx-fundamentals-api](https://github.com/younghwan91/krx-fundamentals-api)** | Korean company fundamentals REST API — financials, ratios, dividends, screening (DART + KRX + Naver) |
+| **[krx-news-rest-api](https://github.com/younghwan91/krx-news-rest-api)** | Korean equity news & disclosure collection API (FastAPI + Redis) |
+| **[kr-quant-airflow](https://github.com/younghwan91/kr-quant-airflow)** | Airflow pipelines loading prices, flows and earnings into TimescaleDB |
+| **[kr-quant](https://github.com/younghwan91/kr-quant)** | KOSPI/KOSDAQ alpha research — guardrails enforcing walk-forward and random negative controls |
+| **[quantbox-engine](https://github.com/younghwan91/quantbox-engine)** | Crypto futures backtest & execution engine — zero look-ahead, backtest/live parity |
+| **[automated-stock-trading-systems](https://github.com/younghwan91/automated-stock-trading-systems)** | Backtester for Bensdorp's 7 non-correlated trading systems (educational reimplementation) |
 
-## 만든 사람
+## Author
 
-**채영환 (Younghwan Chae)** · [GitHub @younghwan91](https://github.com/younghwan91) · [LinkedIn](https://www.linkedin.com/in/younghwan-chae/)
+**Younghwan Chae (채영환)** · [GitHub @younghwan91](https://github.com/younghwan91) · [LinkedIn](https://www.linkedin.com/in/younghwan-chae/)
 
-전체 오픈소스 퀀트 스택은 [프로필](https://github.com/younghwan91)에서 한눈에 볼 수 있습니다.
+The full open-source quant stack is listed on the [profile](https://github.com/younghwan91).

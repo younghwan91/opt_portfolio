@@ -287,7 +287,14 @@ def _pipeline(args: argparse.Namespace) -> tuple[FactorPipeline, StrategyConfig]
             tickers = [*tickers, config.benchmark]
     with _open_existing(args.store) as store:
         ctx = store.build_context(
-            start=args.start, end=args.end, tickers=tickers, benchmark=config.benchmark
+            start=args.start,
+            end=args.end,
+            tickers=tickers,
+            benchmark=config.benchmark,
+            # 팩터·엔진이 실제로 쓰는 넷만 싣는다. open/high/low/dividends/ev 는
+            # 어디서도 참조되지 않는데 패널 하나가 수백 MB 라 GB 단위가 낭비된다
+            # (EV 팩터도 벤더 ev 대신 mcap+debt-cashneq 로 직접 계산한다).
+            price_fields=("close", "closeunadj", "volume", "mcap"),
         )
     return FactorPipeline(ctx), config
 

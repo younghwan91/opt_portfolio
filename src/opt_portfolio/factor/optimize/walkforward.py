@@ -21,6 +21,7 @@ Walk-Forward 파라미터 최적화 — 이 시스템에서 PO 의 유일한 공
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -38,7 +39,7 @@ from opt_portfolio.factor.optimize.search import (
 from opt_portfolio.factor.research.overfitting import deflated_sharpe_ratio
 
 #: evaluate(params, start, end) → 해당 구간의 일별 수익률
-Evaluator = Callable[[Params, pd.Timestamp, pd.Timestamp], pd.Series]
+Evaluator = Callable[..., pd.Series]
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +239,21 @@ def run_walk_forward(
         train_window_years=train_window_years,
     )
 
+    wants_fold = "train_end" in inspect.signature(evaluate).parameters
+
+    def call(
+        params: Params,
+        start: pd.Timestamp,
+        stop: pd.Timestamp,
+        train_end: pd.Timestamp,
+    ) -> pd.Series:
+        """폴드 문맥이 필요한 평가기에만 train_end 를 넘긴다."""
+        return (
+            evaluate(params, start, stop, train_end=train_end)
+            if wants_fold
+            else evaluate(params, start, stop)
+        )
+
     oos_parts: list[pd.Series] = []
     chosen: list[Params] = []
     searches: list[SearchResult] = []
@@ -245,7 +261,9 @@ def run_walk_forward(
     for k, fold in enumerate(folds):
         result = search(
             # fold 는 같은 반복 안에서 search() 가 즉시 소비한다 (지연 평가 없음)
-            lambda p: objective(evaluate(p, fold.train_start, fold.train_end)),  # noqa: B023
+            lambda p: objective(
+                call(p, fold.train_start, fold.train_end, fold.train_end)  # noqa: B023
+            ),
             space,
             method=method,
             n_trials=n_trials_per_fold,
@@ -253,7 +271,7 @@ def run_walk_forward(
         )
         searches.append(result)
         chosen.append(result.best_params)
-        oos_parts.append(evaluate(result.best_params, fold.test_start, fold.test_end))
+        oos_parts.append(call(result.best_params, fold.test_start, fold.test_end, fold.train_end))
         # 폴드 단위 진행 로그 — 풀 히스토리에서는 한 번 돌리는 데 시간 단위가
         # 걸린다. 진행률이 없으면 멈춘 것인지 도는 중인지 구분할 수 없다.
         logger.info(

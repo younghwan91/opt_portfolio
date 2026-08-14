@@ -85,3 +85,64 @@ class TestRebalancePlan:
         plan = rebalance_plan(pd.Series({"A": 0.6, "B": 0.4}), pd.Series(dtype=float))
 
         assert set(plan["action"]) == {"매수"}
+
+
+class TestPriceFieldSelection:
+    """
+    일별 패널은 필요한 필드만 싣는다.
+
+    prices 테이블에는 10개 필드가 있지만 팩터·엔진이 실제로 쓰는 것은
+    close·closeunadj·volume·mcap 넷뿐이다 (EV 팩터도 벤더 ev 대신
+    mcap+debt-cashneq 로 직접 계산한다). 6,895종목 × 7,190일 패널 하나가
+    약 400MB 이므로 안 쓰는 5개를 싣는 것만으로 2GB 가 낭비된다 —
+    이 낭비가 OOM 을 세 번 냈다 (2026-08-14~15).
+    """
+
+    def _store(self, tmp_path):
+        import numpy as np
+        import pandas as pd
+
+        from opt_portfolio.factor.data.store import PITStore
+
+        store = PITStore(str(tmp_path / "t.duckdb"))
+        idx = pd.date_range("2024-01-01", periods=30, freq="B")
+        frame = pd.DataFrame(
+            {
+                "ticker": np.repeat(["A", "B"], len(idx)),
+                "date": list(idx) * 2,
+                "close": 100.0,
+                "closeunadj": 100.0,
+                "volume": 1e6,
+                "mcap": 1e9,
+                "open": 99.0,
+                "high": 101.0,
+                "low": 98.0,
+            }
+        )
+        store.upsert_prices(frame)
+        return store
+
+    def test_loads_only_requested_fields(self, tmp_path) -> None:
+        store = self._store(tmp_path)
+
+        ctx = store.build_context(price_fields=("close", "volume"))
+
+        assert set(ctx.daily) == {"close", "volume"}
+        store.close()
+
+    def test_default_loads_everything_present(self, tmp_path) -> None:
+        """기본값은 기존 동작 그대로 — 명시하지 않으면 아무것도 안 바뀐다."""
+        store = self._store(tmp_path)
+
+        ctx = store.build_context()
+
+        assert {"close", "closeunadj", "volume", "mcap", "open"} <= set(ctx.daily)
+        store.close()
+
+    def test_unknown_field_is_ignored_not_fabricated(self, tmp_path) -> None:
+        store = self._store(tmp_path)
+
+        ctx = store.build_context(price_fields=("close", "없는필드"))
+
+        assert set(ctx.daily) == {"close"}
+        store.close()

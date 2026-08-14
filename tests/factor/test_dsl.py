@@ -196,3 +196,62 @@ class TestRegistry:
         assert REGISTRY.get("AC_A").direction == -1
         assert REGISTRY.get("MOM_1M").direction == -1, "1개월 모멘텀은 반전 팩터"
         assert REGISTRY.get("MOM_12M").direction == 1
+
+
+class TestPanelCacheMemory:
+    """
+    팩터 패널은 신호일 그리드만 캐시해야 한다.
+
+    엔진은 리밸런싱 신호만 쓰는데 일별 패널(종목 × 전 거래일)을 들고 있으면
+    메모리가 21배 커진다. 6,895종목 실적재에서 이 낭비가 OOM 을 두 번 냈다
+    (RSS 11.8GB, 2026-08-14).
+    """
+
+    @staticmethod
+    def _pipeline(n_days: int = 900, n_tickers: int = 40):
+        import numpy as np
+
+        from opt_portfolio.factor.dsl.context import PanelContext
+        from opt_portfolio.factor.pipeline import FactorPipeline
+
+        rng = np.random.default_rng(2)
+        idx = pd.date_range("2015-01-01", periods=n_days, freq="B")
+        cols = [f"T{i:02d}" for i in range(n_tickers)]
+        close = pd.DataFrame(
+            100 * np.exp(np.cumsum(rng.normal(0.0003, 0.01, (n_days, n_tickers)), axis=0)),
+            index=idx,
+            columns=cols,
+        )
+        ctx = PanelContext(
+            daily={"close": close, "closeunadj": close},
+            quarterly={},
+            meta=pd.DataFrame(index=cols),
+        )
+        return FactorPipeline(ctx)
+
+    def test_cache_holds_signal_grid_not_daily(self) -> None:
+        import opt_portfolio.factor.library  # noqa: F401
+
+        pipe = self._pipeline()
+        dates = pipe.signal_dates("ME")
+        spec = REGISTRY.get("MOM_12_1")
+
+        pipe.factor_panel(spec, dates)
+        cached = next(iter(pipe._panel_cache.values()))
+
+        assert len(cached) == len(dates), (
+            f"일별 {len(cached)}행을 캐시했다 — 신호일 {len(dates)}행이어야 한다"
+        )
+
+    def test_repeat_call_returns_same_values(self) -> None:
+        """캐시를 바꿔도 계산 결과는 같아야 한다."""
+        import opt_portfolio.factor.library  # noqa: F401
+
+        pipe = self._pipeline()
+        dates = pipe.signal_dates("ME")
+        spec = REGISTRY.get("MOM_12_1")
+
+        first = pipe.factor_panel(spec, dates)
+        second = pipe.factor_panel(spec, dates)
+
+        pd.testing.assert_frame_equal(first, second)

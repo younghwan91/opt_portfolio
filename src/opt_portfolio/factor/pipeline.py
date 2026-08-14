@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field, replace
 
 import pandas as pd
@@ -34,6 +35,8 @@ from opt_portfolio.factor.optimize.search import Params
 from opt_portfolio.factor.optimize.walkforward import Evaluator
 from opt_portfolio.factor.portfolio.score import composite_score, rank_normalize
 from opt_portfolio.factor.universe.filters import UniverseConfig, build_universe
+
+logger = logging.getLogger(__name__)
 
 #: BacktestConfig 로 그대로 전달되는 PO 파라미터 키
 _BT_KEYS = frozenset(
@@ -62,6 +65,10 @@ class StrategyConfig:
     benchmark: str = "SPY"
     signal_freq: str = "ME"  # 스코어 샘플링 그리드
     regime_conditional: bool = False  # 레짐별 팩터 가중 (research/regime.py)
+    #: >0 이면 **학습 구간 안에서** 팩터 풀 중 상위 k개를 고른다.
+    #: 사후에 사람이 고르면 그 선택은 DSR 시도 횟수에 안 들어가는
+    #: 미정산 부채가 된다 — 선택을 학습 안으로 넣어 OOS 로 검증한다.
+    select_top_k: int = 0
     subscribed: tuple[str, ...] = ("SF1", "SEP")  # 구독 중인 데이터셋
 
     def resolved_factors(self) -> list[FactorSpec]:
@@ -88,17 +95,27 @@ class FactorPipeline:
         if "close" not in ctx.daily:
             raise ValueError("파이프라인에는 daily close 가 필요합니다")
         self.close = ctx.daily["close"]
-        self._panel_cache: dict[str, pd.DataFrame] = {}
+        self._panel_cache: dict[tuple, pd.DataFrame] = {}
         self._universe_cache: dict[UniverseConfig, pd.DataFrame] = {}
         self._regime_cache: dict[tuple, pd.DataFrame] = {}
+        self._selection_cache: dict[tuple, list[str]] = {}
 
     # ------------------------------------------------------------ 팩터 패널
     def factor_panel(self, spec: FactorSpec, signal_dates: pd.DatetimeIndex) -> pd.DataFrame:
-        """스코어링 표현식(방향·역수·중립화 처리 완료)의 신호일 그리드 패널."""
-        if spec.name not in self._panel_cache:
+        """
+        스코어링 표현식(방향·역수·중립화 처리 완료)의 신호일 그리드 패널.
+
+        **신호일 그리드만 캐시한다.** 엔진은 리밸런싱 신호만 쓰는데 일별
+        패널(종목 × 전 거래일)을 들고 있으면 메모리가 21배 커진다 —
+        6,895종목 실적재에서 이 낭비가 OOM 을 두 번 냈다 (RSS 11.8GB).
+        일별 원본은 계산 직후 버린다.
+        """
+        key = (spec.name, len(signal_dates), signal_dates[0], signal_dates[-1])
+        if key not in self._panel_cache:
             daily = self.ctx.eval_daily(spec.scoring_expr())
-            self._panel_cache[spec.name] = daily
-        return self._panel_cache[spec.name].reindex(signal_dates, method="ffill")
+            self._panel_cache[key] = daily.reindex(signal_dates, method="ffill")
+            del daily
+        return self._panel_cache[key]
 
     def signal_dates(self, freq: str) -> pd.DatetimeIndex:
         cal = pd.DatetimeIndex(self.close.index)
@@ -179,6 +196,41 @@ class FactorPipeline:
         self._regime_cache[key] = out
         return out
 
+    def selected_scores(
+        self,
+        config: StrategyConfig,
+        train_end: pd.Timestamp,
+        *,
+        horizon: int = 21,
+    ) -> pd.DataFrame:
+        """
+        `train_end` 까지의 정보로만 팩터를 고른 뒤 합성한 스코어.
+
+        선택 결과는 (팩터 조합, train_end) 로 캐시한다 — 같은 폴드의 여러
+        시도가 같은 선택을 공유하므로 재계산할 이유가 없다.
+        """
+        from opt_portfolio.factor.research.ic import forward_returns
+        from opt_portfolio.factor.research.selection import select_factors
+
+        key = (config.factors, config.select_top_k, pd.Timestamp(train_end))
+        if key in self._selection_cache:
+            names = self._selection_cache[key]
+        else:
+            dates = self.signal_dates(config.signal_freq)
+            panels = {s.name: self.factor_panel(s, dates) for s in config.resolved_factors()}
+            fwd = forward_returns(self.close, horizon=horizon).reindex(dates)
+            names = select_factors(panels, fwd, end=pd.Timestamp(train_end), k=config.select_top_k)
+            self._selection_cache[key] = names
+            logger.info("폴드 팩터 선택 (≤%s): %s", pd.Timestamp(train_end).date(), names)
+
+        dates = self.signal_dates(config.signal_freq)
+        chosen = {
+            s.name: self.factor_panel(s, dates)
+            for s in config.resolved_factors()
+            if s.name in names
+        }
+        return composite_score(chosen, None)
+
     def universe(self, config: UniverseConfig) -> pd.DataFrame:
         if config not in self._universe_cache:
             self._universe_cache[config] = build_universe(self.ctx, config)
@@ -232,7 +284,12 @@ class FactorPipeline:
         exposure = self.exposure(base)
         mcap = self.ctx.daily.get("mcap")
 
-        def evaluate(params: Params, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+        def evaluate(
+            params: Params,
+            start: pd.Timestamp,
+            end: pd.Timestamp,
+            train_end: pd.Timestamp | None = None,
+        ) -> pd.Series:
             bt_kwargs = {k: v for k, v in params.items() if k in _BT_KEYS}
             weight_overrides = {k[2:]: float(v) for k, v in params.items() if k.startswith("w_")}
             unknown = set(params) - _BT_KEYS - {f"w_{n}" for n in weight_overrides}
@@ -245,11 +302,15 @@ class FactorPipeline:
                 if weight_overrides
                 else base.factor_weights
             )
-            scores = (
-                self.regime_scores(base)
-                if base.regime_conditional
-                else self.scores(base, factor_weights=weights)
-            )
+            if base.select_top_k > 0:
+                # 학습 구간 끝 기준으로 고른다. search() 는 train 구간으로,
+                # 최종 평가는 test 구간으로 호출되므로 두 경우 모두
+                # **그 폴드의 학습 끝**을 넘겨야 한다 (아래 evaluator 참조).
+                scores = self.selected_scores(base, train_end=train_end or start)
+            elif base.regime_conditional:
+                scores = self.regime_scores(base)
+            else:
+                scores = self.scores(base, factor_weights=weights)
             result = run_backtest(
                 self.close,
                 scores,
