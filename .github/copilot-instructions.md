@@ -1,8 +1,28 @@
 # Copilot Instructions
 
+> **정본은 저장소 루트의 `CLAUDE.md` 다.** 작업 규약·절대 규칙·벤더 함정은
+> 그쪽에만 쓰고, 이 파일은 Copilot 이 빠르게 훑을 요약만 유지한다.
+> 둘이 어긋나면 `CLAUDE.md` 를 따른다.
+
 ## Project Overview
 
-This is a quantitative portfolio management system implementing the **VAA (Vigilant Asset Allocation)** strategy — a momentum-based tactical asset allocation approach. It dynamically selects ETFs monthly using momentum signals, optimizes portfolio weights via Sharpe Ratio maximization, and provides backtesting, risk analysis, and forecasting.
+두 개의 **격리된** 서브시스템이 한 저장소에 있다. 서로를 import 하지 않으며
+공유하는 것은 `config.RISK_FREE_RATE` 하나뿐이다.
+
+**1. 미국 주식 팩터 엔진 (`src/opt_portfolio/factor/`) — 현재 작업의 중심**
+
+횡단면 팩터 전략을 검증 가능하게 만드는 엔진. 설계 원칙은 하나다 —
+**조용히 틀리지 않는다.** 상장폐지 종목 포함(생존편향 제거), 표현식이 원시
+테이블에 접근 못 하는 PIT 구조, 절단 시 예외, Deflated Sharpe 로 시도 횟수
+정산. 팩터 158개는 선언적 DSL 로 쓰며 TTM/QoQ/YoY/가속 파생형이 자동
+생성된다. 진입점은 `opt-factor` 와 `opt-factor-tui`.
+
+**2. VAA 자산배분 (`strategies/`·`analysis/`·`core/`) — 보존 대상**
+
+Keller 의 Vigilant Asset Allocation. 모멘텀으로 ETF 를 월간 교체하고
+Sharpe 기준으로 비중을 최적화한다. 진입점은 `make run` 과 `run.py`.
+
+**신규 팩터 코드는 `factor/` 이하에만 쓴다.** 기존 트리는 건드리지 않는다.
 
 ## Commands
 
@@ -10,9 +30,13 @@ This is a quantitative portfolio management system implementing the **VAA (Vigil
 # Install (uv)
 make install           # uv sync --extra dev
 
-# Run
+# Run — 팩터 엔진
+opt-factor optimize --store us.duckdb --config configs/x.json --space configs/s.json
+opt-factor holdings --store us.duckdb --config configs/x.json   # 오늘 살 종목
+opt-factor-tui      --store us.duckdb --config configs/x.json   # 운용 화면
+
+# Run — VAA
 make run               # interactive menu
-python3 run.py --cli   # CLI
 python3 run.py --backtest
 python3 run.py --optimize
 

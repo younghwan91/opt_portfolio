@@ -1,6 +1,9 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  # 이 저장소의 의존성 원천은 pyproject.toml + uv.lock 하나다.
+  # requirements.txt 는 CI·Makefile 어디서도 쓰이지 않으면서 dependabot 만
+  # 물고 있었고, 그래서 이미 제거한 streamlit 버전 상향 PR 이 계속 올라왔다.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
