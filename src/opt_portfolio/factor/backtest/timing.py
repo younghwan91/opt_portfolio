@@ -87,3 +87,38 @@ def combine_exposures(*exposures: pd.Series) -> pd.Series:
         combined, e = combined.align(e, join="outer")
         combined = combined.fillna(1.0) * e.fillna(1.0)
     return combined.clip(0.0, 1.0)
+
+
+def volatility_target_exposure(
+    returns: pd.Series,
+    target_vol: float = 0.15,
+    *,
+    window: int = 63,
+    max_exposure: float = 1.0,
+    min_exposure: float = 0.0,
+    ann: int = 252,
+) -> pd.Series:
+    """
+    변동성 타게팅 익스포저 — 이진 타이밍의 연속판.
+
+        exposure_t = clip(target_vol / realized_vol_t, min, max)
+
+    실현변동성이 목표보다 높으면 줄이고 낮으면 늘린다. Moreira & Muir(2017)의
+    변동성 관리 포트폴리오와 같은 형태다. 이진 오버레이가 못 하는 두 가지를
+    한다 — 변동성이 서서히 오를 때 점진적으로 줄이고, 조용한 구간에서
+    노출을 회복한다.
+
+    Args:
+        returns: 벤치마크 또는 전략의 일별 수익률
+        window: 실현변동성 측정 창 (거래일)
+        max_exposure: 상한. 기본 1.0 = 레버리지 없음. 변동성이 0 에 가까우면
+            비율이 발산하므로 상한이 없으면 위험하다.
+        min_exposure: 하한. 0 이면 완전 청산을 허용한다. 이진 타이밍이
+            2009년 반등 초입을 놓친 것이 완전 청산의 대가였다.
+
+    관측이 모자란 초기 구간은 **1.0(중립)** 이다 — 0 을 주면 그 기간이
+    통째로 사라진다. 신호는 판정일 기준이며 시프트는 엔진이 담당한다.
+    """
+    realized = returns.rolling(window, min_periods=window).std(ddof=1) * (ann**0.5)
+    exposure = (target_vol / realized.where(realized > 0)).clip(min_exposure, max_exposure)
+    return exposure.fillna(1.0)

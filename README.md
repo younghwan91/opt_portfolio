@@ -39,19 +39,32 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 | **Overfitting** — run hundreds of variants, report the best | **Deflated Sharpe Ratio** + **PBO** charge for the number of trials |
 | **In-sample performance reporting** | Official performance is **walk-forward only**; single backtests are labelled reference-only |
 
-## Performance — 18.6 years out-of-sample
+## Performance
 
-Currently adopted strategy (US small caps, 8 factors + 200-day moving-average timing overlay):
+<!-- PERFORMANCE:START -->
 
-| Metric | Value |
-|---|---|
-| CAGR | **16.90%** |
-| Max drawdown | **−23.7%** |
-| Sharpe | 0.756 |
-| Calmar | 0.71 |
-| **Deflated Sharpe** | **0.992** (gate: 0.95) |
+*Adopted strategy · walk-forward out-of-sample · 2007-12 – 2026-08 (18.6y)*
 
-**The Deflated Sharpe is the number that matters here.** It subtracts the maximum Sharpe you would expect from pure noise given how many variants were tried (57), leaving what is actually left over. A strategy that cannot clear 0.95 is not adopted — more than twenty candidates were rejected at this gate in this repository.
+| Metric | Strategy | SPY (same window) |
+|---|---|---|
+| CAGR | **16.90%** | 11.36% |
+| Max drawdown | **-23.7%** | -52.3% |
+| Volatility | **15.7%** | 19.8% |
+| Sharpe | **0.756** | 0.390 |
+| Calmar | **0.71** | 0.22 |
+| **Deflated Sharpe** (57 trials) | **0.992** ✓ | — |
+
+```
+▁▁▁▁▁▁▂▂▂▂▃▂▃▃▃▃▃▃▃▄▄▄▄▄▄▃▃▃▄▄▄▄▅▅▅▅▅▅▅▅▅▆▆▇▇▇▇▇▇▇▇▇▇▇▇█▇████
+```
+
+Cumulative 18.2× over the validation window. Holdings are not published — the universe is micro-cap and crowding would move the entry price.
+
+<!-- PERFORMANCE:END -->
+
+Currently adopted strategy: US small caps, 8 factors + 200-day moving-average timing overlay, 20 stocks, quarterly rebalance, equal weight.
+
+**The Deflated Sharpe is the number that matters here.** It subtracts the maximum Sharpe you would expect from pure noise given how many variants were tried, leaving what is actually left over. A strategy that cannot clear 0.95 is not adopted — more than twenty candidates were rejected at this gate in this repository.
 
 The full record is in [`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md) (Korean).
 

@@ -28,7 +28,10 @@ from opt_portfolio.factor.backtest.engine import (
     BacktestResult,
     run_backtest,
 )
-from opt_portfolio.factor.backtest.timing import momentum_exposure
+from opt_portfolio.factor.backtest.timing import (
+    momentum_exposure,
+    volatility_target_exposure,
+)
 from opt_portfolio.factor.dsl.context import PanelContext
 from opt_portfolio.factor.dsl.registry import REGISTRY, FactorSpec
 from opt_portfolio.factor.optimize.search import Params
@@ -62,6 +65,13 @@ class StrategyConfig:
     backtest: BacktestConfig = field(default_factory=BacktestConfig)
     timing_ma_days: int | None = None  # None = 마켓타이밍 없음
     timing_reentry_days: int = 5
+    #: 변동성 타게팅 목표 (연율). None 이면 미사용.
+    #: 이평 타이밍과 함께 켜면 두 익스포저를 곱한다 — 이진 차단 위에
+    #: 연속 조절을 얹는 형태다.
+    target_vol: float | None = None
+    vol_window: int = 63
+    vol_min_exposure: float = 0.0
+    vol_max_exposure: float = 1.0
     benchmark: str = "SPY"
     signal_freq: str = "ME"  # 스코어 샘플링 그리드
     regime_conditional: bool = False  # 레짐별 팩터 가중 (research/regime.py)
@@ -237,7 +247,7 @@ class FactorPipeline:
         return self._universe_cache[config]
 
     def exposure(self, config: StrategyConfig) -> pd.Series | None:
-        if config.timing_ma_days is None:
+        if config.timing_ma_days is None and config.target_vol is None:
             return None
         bench = self.ctx.meta.get("benchmark_return")
         if bench is None:
@@ -249,7 +259,25 @@ class FactorPipeline:
             bench_close = close_b
         else:
             bench_close = (1.0 + bench.fillna(0.0)).cumprod()
-        return momentum_exposure(bench_close, config.timing_ma_days, config.timing_reentry_days)
+        parts: list[pd.Series] = []
+        if config.timing_ma_days is not None:
+            parts.append(
+                momentum_exposure(bench_close, config.timing_ma_days, config.timing_reentry_days)
+            )
+        if config.target_vol is not None:
+            parts.append(
+                volatility_target_exposure(
+                    bench_close.pct_change(),
+                    target_vol=config.target_vol,
+                    window=config.vol_window,
+                    min_exposure=config.vol_min_exposure,
+                    max_exposure=config.vol_max_exposure,
+                )
+            )
+        combined = parts[0]
+        for extra in parts[1:]:
+            combined = combined * extra.reindex(combined.index).fillna(1.0)
+        return combined
 
     # ------------------------------------------------------------ 실행
     def run(

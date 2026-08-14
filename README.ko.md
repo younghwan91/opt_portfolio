@@ -39,19 +39,32 @@
 | 과최적화 — 수백 번 돌려 최고를 고른다 | **DSR**(Deflated Sharpe) + **PBO** 로 시도 횟수를 정산 |
 | 인샘플 성과 보고 | 공식 성과는 **walk-forward** 뿐. 단일 백테스트는 참고용 명시 |
 
-## 성과 — 검증 구간 18.6년
+## 성과
 
-현재 채택 전략(미국 소형주 8팩터 + 200일 이평 타이밍):
+<!-- PERFORMANCE:START -->
 
-| 지표 | 값 |
-|---|---|
-| CAGR | **16.90%** |
-| 최대 낙폭 | **−23.7%** |
-| Sharpe | 0.756 |
-| Calmar | 0.71 |
-| **Deflated Sharpe** | **0.992** (관문 0.95) |
+*Adopted strategy · walk-forward out-of-sample · 2007-12 – 2026-08 (18.6y)*
 
-**Deflated Sharpe 가 이 표에서 가장 중요한 숫자다.** 같은 데이터로 57번 시도해 고른 결과에서, 순수한 노이즈만으로 기대되는 최대 Sharpe 를 빼고 남는 값이다. 0.95 를 넘지 못하면 그 전략은 채택하지 않는다 — 실제로 이 저장소에서 20개 넘는 전략이 이 관문에서 탈락했다.
+| Metric | Strategy | SPY (same window) |
+|---|---|---|
+| CAGR | **16.90%** | 11.36% |
+| Max drawdown | **-23.7%** | -52.3% |
+| Volatility | **15.7%** | 19.8% |
+| Sharpe | **0.756** | 0.390 |
+| Calmar | **0.71** | 0.22 |
+| **Deflated Sharpe** (57 trials) | **0.992** ✓ | — |
+
+```
+▁▁▁▁▁▁▂▂▂▂▃▂▃▃▃▃▃▃▃▄▄▄▄▄▄▃▃▃▄▄▄▄▅▅▅▅▅▅▅▅▅▆▆▇▇▇▇▇▇▇▇▇▇▇▇█▇████
+```
+
+Cumulative 18.2× over the validation window. Holdings are not published — the universe is micro-cap and crowding would move the entry price.
+
+<!-- PERFORMANCE:END -->
+
+채택 전략: 미국 소형주, 8팩터 + 200일 이평 타이밍, 20종목, 분기 리밸런싱, 동일비중.
+
+**Deflated Sharpe 가 이 표에서 가장 중요한 숫자다.** 같은 데이터로 여러 번 시도해 고른 결과에서, 순수한 노이즈만으로 기대되는 최대 Sharpe 를 빼고 남는 값이다. 0.95 를 넘지 못하면 채택하지 않는다 — 실제로 이 저장소에서 20개 넘는 전략이 이 관문에서 탈락했다.
 
 전 과정 기록은 [`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md) 에 있다.
 
