@@ -39,7 +39,7 @@ dependencies = [
     "matplotlib>=3.10.8",
     "scipy>=1.10.0",
     "tenacity>=8.0.0",
-    "requests>=2.31.0",
+    "requests>=2.34.2",
 ]
 
 [project.optional-dependencies]
