@@ -1,0 +1,59 @@
+{
+  "factors": [
+    "PER",
+    "PSR",
+    "POR",
+    "PGPR",
+    "PFCR",
+    "PBR",
+    "NETINC_GROWTH_YOY",
+    "OPINC_GROWTH_YOY",
+    "GP_GROWTH_YOY",
+    "REVENUE_GROWTH_YOY",
+    "GP_A",
+    "ROIC",
+    "IT_TURNOVER",
+    "ASSET_TURNOVER",
+    "GPIC",
+    "SIZE",
+    "NOA",
+    "ACCRUAL_CF",
+    "CBOP",
+    "MOM_12_1"
+  ],
+  "factor_weights": null,
+  "universe": {
+    "min_mcap_usd": 5000000.0,
+    "max_mcap_usd": 80000000.0,
+    "min_price_usd": 0.0,
+    "min_adv_usd": 0.0,
+    "exclude_financials": true,
+    "exclude_holdings": true,
+    "exclude_distressed": true,
+    "exclude_deficit_quarter": true,
+    "exclude_deficit_ttm": true,
+    "exclude_china": true,
+    "exclude_ptp": true
+  },
+  "backtest": {
+    "n_stocks": 20,
+    "rebalance": "QE",
+    "weighting": "equal",
+    "max_weight": 0.06,
+    "cov_window": 252,
+    "cost": {
+      "commission_bps": 50.0,
+      "slippage_bps": 0.0
+    }
+  },
+  "timing_ma_days": 200,
+  "benchmark": "SPY",
+  "signal_freq": "ME",
+  "subscribed": [
+    "SF1",
+    "SEP"
+  ],
+  "timing_reentry_days": 5,
+  "select_top_k": 6,
+  "select_method": "residual"
+}

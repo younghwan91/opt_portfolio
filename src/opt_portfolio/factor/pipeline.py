@@ -79,6 +79,10 @@ class StrategyConfig:
     #: 사후에 사람이 고르면 그 선택은 DSR 시도 횟수에 안 들어가는
     #: 미정산 부채가 된다 — 선택을 학습 안으로 넣어 OOS 로 검증한다.
     select_top_k: int = 0
+    #: 선별 기준. "ic" 는 개별 IC 상위 k개, "residual" 은 이미 고른 팩터에
+    #: 회귀하고 남은 잔차의 IC 로 고르는 전진 선택이다. 전자는 겹치는 팩터가
+    #: 자리를 다 차지한다 — 실측에서 성장 팩터가 19폴드 내내 0번 뽑혔다.
+    select_method: str = "ic"
     subscribed: tuple[str, ...] = ("SF1", "SEP")  # 구독 중인 데이터셋
 
     def resolved_factors(self) -> list[FactorSpec]:
@@ -220,18 +224,24 @@ class FactorPipeline:
         시도가 같은 선택을 공유하므로 재계산할 이유가 없다.
         """
         from opt_portfolio.factor.research.ic import forward_returns
-        from opt_portfolio.factor.research.selection import select_factors
+        from opt_portfolio.factor.research.selection import SELECTORS
 
-        key = (config.factors, config.select_top_k, pd.Timestamp(train_end))
+        key = (config.factors, config.select_top_k, config.select_method, pd.Timestamp(train_end))
         if key in self._selection_cache:
             names = self._selection_cache[key]
         else:
+            select = SELECTORS[config.select_method]
             dates = self.signal_dates(config.signal_freq)
             panels = {s.name: self.factor_panel(s, dates) for s in config.resolved_factors()}
             fwd = forward_returns(self.close, horizon=horizon).reindex(dates)
-            names = select_factors(panels, fwd, end=pd.Timestamp(train_end), k=config.select_top_k)
+            names = select(panels, fwd, end=pd.Timestamp(train_end), k=config.select_top_k)
             self._selection_cache[key] = names
-            logger.info("폴드 팩터 선택 (≤%s): %s", pd.Timestamp(train_end).date(), names)
+            logger.info(
+                "폴드 팩터 선택 (%s, ≤%s): %s",
+                config.select_method,
+                pd.Timestamp(train_end).date(),
+                names,
+            )
 
         dates = self.signal_dates(config.signal_freq)
         chosen = {
