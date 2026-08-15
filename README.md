@@ -318,7 +318,7 @@ Part of an open-source stack spanning market/fundamental/news collection APIs, d
 | **[kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)** | Kiwoom Securities REST API Python client — 207 endpoints + real-time WebSocket |
 | **[krx-fundamentals-api](https://github.com/younghwan91/krx-fundamentals-api)** | Korean company fundamentals REST API — financials, ratios, dividends, screening (DART + KRX + Naver) |
 | **[krx-news-rest-api](https://github.com/younghwan91/krx-news-rest-api)** | Korean equity news & disclosure collection API (FastAPI + Redis) |
-| **[kr-quant-airflow](https://github.com/younghwan91/kr-quant-airflow)** | Airflow pipelines loading prices, flows and earnings into TimescaleDB |
+| **[quant-airflow](https://github.com/younghwan91/quant-airflow)** | Airflow pipelines loading prices, flows and earnings into TimescaleDB |
 | **[kr-quant](https://github.com/younghwan91/kr-quant)** | KOSPI/KOSDAQ alpha research — guardrails enforcing walk-forward and random negative controls |
 | **[quantbox-engine](https://github.com/younghwan91/quantbox-engine)** | Crypto futures backtest & execution engine — zero look-ahead, backtest/live parity |
 | **[automated-stock-trading-systems](https://github.com/younghwan91/automated-stock-trading-systems)** | Backtester for Bensdorp's 7 non-correlated trading systems (educational reimplementation) |
