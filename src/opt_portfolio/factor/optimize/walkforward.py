@@ -44,6 +44,16 @@ Evaluator = Callable[..., pd.Series]
 logger = logging.getLogger(__name__)
 
 
+def _rss_gb() -> float:
+    """현재 프로세스 RSS (GB). psutil 없이 procfs 로 — 의존성을 늘리지 않는다."""
+    try:
+        with open("/proc/self/statm") as fh:
+            pages = int(fh.read().split()[1])
+    except OSError:  # 리눅스가 아니면 계측을 포기한다 (실행은 막지 않는다)
+        return float("nan")
+    return pages * 4096 / 1024**3
+
+
 @dataclass(frozen=True)
 class Fold:
     train_start: pd.Timestamp
@@ -298,13 +308,19 @@ def run_walk_forward(
         )
         # 폴드 단위 진행 로그 — 풀 히스토리에서는 한 번 돌리는 데 시간 단위가
         # 걸린다. 진행률이 없으면 멈춘 것인지 도는 중인지 구분할 수 없다.
+        #
+        # RSS 를 같이 찍는 이유: 풀 히스토리 walk-forward 가 폴드 13에서
+        # OOM 으로 두 번 죽었는데, 로그에 진행률만 있어서 **메모리가 폴드마다
+        # 자라는 것인지 그냥 높은 것인지 구분할 수 없었다.** 사후에 커널
+        # 로그로 알 수 있는 것은 "죽었다" 뿐이다. 기울기는 여기서만 보인다.
         logger.info(
-            "폴드 %d/%d 완료 — test %s~%s, 최적 %s",
+            "폴드 %d/%d 완료 — test %s~%s, 최적 %s, RSS %.1fGB",
             k + 1,
             len(folds),
             fold.test_start.date(),
             fold.test_end.date(),
             result.best_params,
+            _rss_gb(),
         )
 
     oos = pd.concat(oos_parts).sort_index()

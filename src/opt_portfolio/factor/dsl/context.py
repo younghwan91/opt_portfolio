@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+import logging
+from collections import OrderedDict
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 
@@ -21,6 +23,17 @@ import pandas as pd
 
 from opt_portfolio.factor.data.schema import FieldKind, get_field
 from opt_portfolio.factor.dsl.expr import Panel
+
+logger = logging.getLogger(__name__)
+
+#: 승격 캐시에 남길 프레임 수. 풀 히스토리에서 승격 프레임 하나가 362MB 다
+#: (9,000 거래일 × 6,895종목). 무제한이면 팩터 20개를 평가하는 것만으로
+#: 수 GB 가 쌓여 15GB 머신이 OOM 으로 죽는다 (2026-08-15 실측).
+#:
+#: 캐시의 실질적 값어치는 **한 표현식 안의 재사용**이다 — 파이프라인은 승격
+#: 결과를 신호일 그리드로 줄인 직후 버리므로 호출 사이에 다시 쓰지 않는다.
+#: 그래서 작은 LRU 로 충분하다.
+PROMOTE_CACHE_SIZE = 4
 
 
 @dataclass
@@ -49,9 +62,10 @@ class PanelContext:
 
     # (id(frame), id(avail)) → (원본 참조들, 승격 결과). 원본을 함께 보관해
     # GC 로 id 가 재사용되면서 엉뚱한 캐시가 히트하는 것을 막는다.
-    _promote_cache: dict[
+    # PROMOTE_CACHE_SIZE 개로 제한되는 LRU — 크기 제한이 없으면 메모리가 샌다.
+    _promote_cache: OrderedDict[
         tuple[int, int], tuple[pd.DataFrame, pd.DataFrame | None, pd.DataFrame]
-    ] = dc_field(default_factory=dict, repr=False, compare=False)
+    ] = dc_field(default_factory=OrderedDict, repr=False, compare=False)
 
     # ------------------------------------------------------------------ 필드 접근
     def field(self, name: str) -> Panel:
@@ -106,6 +120,7 @@ class PanelContext:
         cache_key = (id(quarterly), id(avail_frame))
         cached = self._promote_cache.get(cache_key)
         if cached is not None and cached[0] is quarterly and cached[1] is avail_frame:
+            self._promote_cache.move_to_end(cache_key)
             return cached[2]
 
         cal = self.trading_calendar
@@ -131,6 +146,8 @@ class PanelContext:
             out[ticker] = picked
 
         self._promote_cache[cache_key] = (quarterly, avail_frame, out)
+        while len(self._promote_cache) > PROMOTE_CACHE_SIZE:
+            self._promote_cache.popitem(last=False)
         return out
 
     def eval_daily(self, expr: object) -> pd.DataFrame:

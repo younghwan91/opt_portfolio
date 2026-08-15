@@ -118,6 +118,7 @@ def run_backtest(
     sectors: pd.Series | None = None,
     start: pd.Timestamp | None = None,
     end: pd.Timestamp | None = None,
+    returns: pd.DataFrame | None = None,
 ) -> BacktestResult:
     """
     Args:
@@ -126,10 +127,14 @@ def run_backtest(
         universe: 불리언 마스크 (date × ticker). 없으면 스코어 관측 = 편입 가능.
         exposure: 타이밍 익스포저 (판정일 기준). 내부에서 1일 시프트해 적용.
         start/end: 평가 구간. 신호·공분산은 구간 밖 과거를 쓸 수 있다.
+        returns: `close.pct_change()` 를 미리 계산해 둔 것. 파라미터와 무관하니
+            walk-forward 처럼 같은 close 로 수백 번 부르는 쪽에서 넘기면 된다
+            (풀 히스토리에서 이 프레임 하나가 500MB 다 — 호출마다 새로 만들면
+            그만큼을 매번 할당하고 버린다).
     """
     calendar = close.index
     # fill_method=None: 상장폐지 후 NaN 이 pad 로 되살아나는 것을 막는다
-    rets = close.pct_change(fill_method=None)
+    rets = close.pct_change(fill_method=None) if returns is None else returns
 
     span = calendar
     if start is not None:

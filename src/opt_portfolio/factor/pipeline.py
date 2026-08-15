@@ -312,6 +312,10 @@ class FactorPipeline:
         universe_mask = self.universe(base.universe)
         exposure = self.exposure(base)
         mcap = self.ctx.daily.get("mcap")
+        # 수익률은 파라미터와 무관하다. 폴드 19개 × 시도 3개 = 백 번 넘게
+        # 호출되는데 그때마다 다시 만들면 500MB 짜리 프레임을 백 번 할당하고
+        # 버린다 — 해제된 아레나가 OS 로 돌아가지 않아 RSS 가 계단식으로 올랐다.
+        daily_returns = self.close.pct_change(fill_method=None)
 
         def evaluate(
             params: Params,
@@ -350,6 +354,7 @@ class FactorPipeline:
                 sectors=self.ctx.meta.get("sector"),
                 start=start,
                 end=end,
+                returns=daily_returns,
             )
             return result.returns
 
