@@ -190,6 +190,7 @@ def build_block(
     label: str,
     trials: int | None = None,
     lang: str = "en",
+    note: str | None = None,
 ) -> str:
     s = STRINGS[lang]
     m = metrics(oos)
@@ -228,9 +229,12 @@ def build_block(
         *rows,
         "",
         s["footer"].format(mult=equity.iloc[-1]),
-        "",
-        END,
     ]
+    # 구간을 늘려 표제 숫자가 커졌다면 그 사실을 표 옆에 함께 둔다. 각주로
+    # 밀어두면 읽는 사람은 큰 숫자만 가져간다.
+    if note:
+        lines += ["", note]
+    lines += ["", END]
     return "\n".join(lines)
 
 
@@ -254,6 +258,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--benchmark", default="SPY")
     ap.add_argument("--label", default=None, help="기본값은 언어별 문구")
     ap.add_argument("--trials", type=int, default=None, help="DSR 정산에 쓸 총 시도 횟수")
+    ap.add_argument(
+        "--note",
+        action="append",
+        default=None,
+        help="표 아래에 붙일 단서. `lang:문장` 형식 (예: ko:2003~2007 은 ...)",
+    )
     ap.add_argument(
         "--readme",
         action="append",
@@ -280,7 +290,10 @@ def main(argv: list[str] | None = None) -> int:
         if not full.exists():
             print(f"건너뜀 (없음): {full}")
             continue
-        block = build_block(oos, bench, args.label or default_label[lang], args.trials, lang)
+        notes = dict(n.split(":", 1) for n in (args.note or []))
+        block = build_block(
+            oos, bench, args.label or default_label[lang], args.trials, lang, notes.get(lang)
+        )
         print(("갱신: " if splice(full, block) else "표식 없음/변화 없음: ") + str(full))
     return 0
 

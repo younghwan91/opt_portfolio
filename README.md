@@ -43,7 +43,7 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 
 <!-- PERFORMANCE:START -->
 
-*Adopted strategy · walk-forward out-of-sample · 2007-12 – 2026-08 (18.6y)*
+*Adopted strategy · walk-forward out-of-sample · 2002-12 – 2026-08 (23.6y)*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/performance-dark.png">
@@ -52,14 +52,16 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 
 | Metric | Strategy | SPY (same window) |
 |---|---|---|
-| CAGR | **16.90%** | 11.36% |
-| Max drawdown | **-23.7%** | -52.3% |
-| Volatility | **15.7%** | 19.8% |
-| Sharpe | **0.756** | 0.390 |
-| Calmar | **0.71** | 0.22 |
-| **Deflated Sharpe** (57 trials) | **0.992** ✓ | — |
+| CAGR | **23.78%** | 11.66% |
+| Max drawdown | **-23.7%** | -55.2% |
+| Volatility | **17.0%** | 18.6% |
+| Sharpe | **1.047** | 0.418 |
+| Calmar | **1.00** | 0.21 |
+| **Deflated Sharpe** (72 trials) | **1.000** ✓ | — |
 
-Cumulative 18.2× over the validation window. Holdings are not published — the universe is micro-cap and crowding would move the entry price.
+Cumulative 153.0× over the validation window. Holdings are not published — the universe is micro-cap and crowding would move the entry price.
+
+**Read the headline carefully.** Restricted to the window the previous protocol covered (2007-12 onward), this strategy returns 16.92% CAGR at Sharpe 0.758 — statistically identical to the 10-year-training result (16.90% / 0.756). The entire uplift comes from the newly included 2003–2007, a small-cap bull market that alone ran at 53% CAGR. Halving the training window left the overlapping period unchanged, which is evidence of robustness, not of a better strategy.
 
 <!-- PERFORMANCE:END -->
 
