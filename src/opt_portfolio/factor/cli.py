@@ -451,6 +451,43 @@ def cmd_holdings(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pbo(args: argparse.Namespace) -> int:
+    """
+    PBO (CSCV) — `05-math-spec.md` §5 의 승인 관문 ④.
+
+    이 관문은 문서에 규정돼 있으면서 **한 번도 실행된 적이 없었다**
+    (2026-08-15 전수 검토에서 발견). `probability_of_backtest_overfitting` 의
+    독스트링은 "optimize 레이어가 자동으로 쌓아준다"고 적혀 있었지만,
+    `SearchResult.trials` 는 목적함수 **값만** 저장하고 수익률 시계열은 버린다.
+
+    PBO 는 walk-forward 가 아니라 **탐색 공간 전체**를 요구한다 — 각 파라미터
+    조합을 전 구간에 돌려 (기간 × 조합) 행렬을 만들고, 블록을 IS/OOS 로 갈라
+    "IS 최적이 OOS 에서도 상위인가"를 센다. 그래서 별도 커맨드다.
+    """
+    from opt_portfolio.factor.optimize.search import grid_params
+    from opt_portfolio.factor.research.overfitting import probability_of_backtest_overfitting
+
+    pipeline, config = _pipeline(args)
+    space = load_space(args.space)
+    evaluate = pipeline.evaluator(config)
+    calendar = pd.DatetimeIndex(pipeline.close.index)
+    start, end = calendar[0], calendar[-1]
+
+    candidates = grid_params(space, args.grid_steps)
+    print(f"탐색 조합 {len(candidates)}개 — 전 구간 {start.date()} ~ {end.date()}")
+    columns = {}
+    for i, params in enumerate(candidates, 1):
+        label = ",".join(f"{k}={v}" for k, v in sorted(params.items()))
+        columns[label] = evaluate(params, start, end)
+        print(f"  [{i}/{len(candidates)}] {label}")
+
+    trial_returns = pd.DataFrame(columns)
+    result = probability_of_backtest_overfitting(trial_returns, n_blocks=args.blocks)
+    verdict = "통과" if result.pbo < 0.3 else "실패 — 탐색 공간을 줄여야 한다"
+    print(f"\nPBO: {result.pbo:.3f}  (관문 < 0.3 → {verdict})")
+    return 0
+
+
 def cmd_optimize(args: argparse.Namespace) -> int:
     from opt_portfolio.factor.optimize.walkforward import OBJECTIVES, run_walk_forward
 
@@ -575,6 +612,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="tearsheet.html")
     p.add_argument("--title", default="Factor Strategy Tearsheet")
     p.set_defaults(fn=cmd_report)
+
+    p = sub.add_parser("pbo", help="PBO (CSCV) — 승인 관문 ④")
+    p.add_argument("--store", required=True)
+    p.add_argument("--config", required=True)
+    p.add_argument("--space", required=True)
+    p.add_argument("--tickers-file", default=None)
+    p.add_argument("--start", default=None)
+    p.add_argument("--end", default=None)
+    p.add_argument("--grid-steps", type=int, default=4, help="연속 축을 몇 단계로 이산화하는가")
+    p.add_argument("--blocks", type=int, default=10, help="CSCV 블록 수 (짝수)")
+    p.set_defaults(fn=cmd_pbo)
 
     p = sub.add_parser("optimize", help="walk-forward PO — 공식 성과 경로")
     p.add_argument("--store", required=True)
