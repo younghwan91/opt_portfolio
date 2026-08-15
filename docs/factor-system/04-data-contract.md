@@ -13,6 +13,29 @@
 | `estimates` | (ticker, calendardate) | 애널리스트 추정치 | 수집 시점 스냅샷 |
 | `prices` | (ticker, date) | 일별 가격·거래량·시총 (SEP + DAILY 병합) | 해당일 |
 | `tickers` | (ticker) | 섹터·소재지·유형·이름 | — |
+| `actions` | (ticker, date, action) | 분할·배당·상장·폐지·분사 | 해당일 |
+| `sp500` | (date, ticker, action) | 지수 편입·편출 이력 (1957~) | 해당일 |
+
+**현재 적재 상태** (2026-08-15 실측):
+
+| 테이블 | 행수 |
+|---|---|
+| `prices` | 46,331,751 |
+| `actions` | 672,349 |
+| `fundamentals` | 654,637 |
+| `sp500` | 60,172 |
+| `tickers` | 44,938 |
+| `institutions` · `insiders` · `estimates` | **0** |
+
+**0행인 셋은 의도된 상태가 아니다.** `institutions` 는 벌크 CSV 리더가 실제
+헤더(`date`)가 아니라 `calendardate` 를 기대해 한 번도 동작한 적이 없었다
+(2026-08-15 발견, 수정됨). `estimates` 는 Sharadar 에 애널리스트 추정치가 없어
+비어 있는 것이 정상이다 (`00-overview.md` §2).
+
+빈 테이블이 조용한 오류로 번지지는 않는다 — 전략 설정의 `subscribed` 가
+`["SF1","SEP"]` 이면 SF2/SF3 를 요구하는 팩터(`flow_proxy` 5종)는 `requires`
+메타로 자동 제외되고 경고가 남는다. **다만 "쓸 수 있다고 문서에 적혀 있는데
+실제로는 비어 있는 것"과 "설계상 없는 것"은 구분해서 적어야 한다.**
 
 **13F 와 내부자를 분리한 이유**: 같은 분기라도 공시 지연이 다르다 (+45일 vs +3일).
 한 테이블에 datekey 하나로 합치면 둘 중 하나의 가용 시점이 왜곡된다.
