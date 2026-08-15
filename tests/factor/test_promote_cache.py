@@ -32,8 +32,7 @@ def _ctx(n_frames: int) -> tuple[PanelContext, list[pd.DataFrame]]:
         columns=cols,
     )
     frames = [
-        pd.DataFrame(np.full((2, 2), float(i)), index=qdates, columns=cols)
-        for i in range(n_frames)
+        pd.DataFrame(np.full((2, 2), float(i)), index=qdates, columns=cols) for i in range(n_frames)
     ]
     ctx = PanelContext(
         quarterly={f"f{i}": f for i, f in enumerate(frames)},
