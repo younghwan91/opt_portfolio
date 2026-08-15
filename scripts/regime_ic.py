@@ -14,10 +14,22 @@ from opt_portfolio.factor.research.ic import forward_returns  # noqa: E402
 from opt_portfolio.factor.research.regime import classify, factor_ic_by_regime  # noqa: E402
 
 FACTORS = [
-    "GP_A", "IT_TURNOVER", "REVENUE_GROWTH_YOY", "PFCR", "SIZE",
-    "PER", "PSR", "POR", "PGPR",
-    "NETINC_GROWTH_YOY", "OPINC_GROWTH_YOY", "GP_GROWTH_YOY",
-    "MOM_12_1", "VOL_52W", "ACCRUAL_CF", "NOA",
+    "GP_A",
+    "IT_TURNOVER",
+    "REVENUE_GROWTH_YOY",
+    "PFCR",
+    "SIZE",
+    "PER",
+    "PSR",
+    "POR",
+    "PGPR",
+    "NETINC_GROWTH_YOY",
+    "OPINC_GROWTH_YOY",
+    "GP_GROWTH_YOY",
+    "MOM_12_1",
+    "VOL_52W",
+    "ACCRUAL_CF",
+    "NOA",
 ]
 
 store = PITStore("/home/young/data/us.duckdb")

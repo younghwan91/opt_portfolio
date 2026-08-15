@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         df.to_csv(args.out, index=False)
     print(f"\n평가 {len(df)} / 건너뜀 {len(skipped)}")
-    print(f"승격 기준: |spread_t| ≥ 2 · 단조성 ≥ 0.6 · 회전율 ≤ 0.15\n")
+    print("승격 기준: |spread_t| ≥ 2 · 단조성 ≥ 0.6 · 회전율 ≤ 0.15\n")
     print(df.head(30).to_string(index=False))
     promoted = df[df["pass"] == "✓"]
     print(f"\n승격 후보 {len(promoted)}개: {', '.join(promoted['factor']) or '없음'}")

@@ -5,8 +5,8 @@ help:
 	@echo "  make install     - 의존성 설치 (dev 포함)"
 	@echo "  make test        - 전체 테스트 실행"
 	@echo "  make test-one    - 특정 테스트 실행 (예: make test-one T=tests/test_config.py::TestAllocationConfig::test_default_validation)"
-	@echo "  make lint        - 코드 스타일 검사 (black, isort, flake8)"
-	@echo "  make format      - 코드 자동 포맷 (black, isort)"
+	@echo "  make lint        - 코드 스타일 검사 (ruff check + format --check)"
+	@echo "  make format      - 코드 자동 포맷 (ruff --fix + format)"
 	@echo "  make typecheck   - 타입 검사 (mypy)"
 	@echo "  make run         - 인터랙티브 메뉴 실행"
 	@echo "  make clean       - 임시 파일 정리"
@@ -21,12 +21,12 @@ test-one:
 	uv run pytest $(T) -v
 
 lint:
-	uv run ruff check src/ tests/
-	uv run ruff format --check src/ tests/
+	uv run ruff check src/ tests/ scripts/
+	uv run ruff format --check src/ tests/ scripts/
 
 format:
-	uv run ruff check --fix src/ tests/
-	uv run ruff format src/ tests/
+	uv run ruff check --fix src/ tests/ scripts/
+	uv run ruff format src/ tests/ scripts/
 
 typecheck:
 	uv run mypy src/
