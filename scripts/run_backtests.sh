@@ -30,7 +30,7 @@ run() {
         --store "$STORE" --config "$config" \
         --space "$REPO/configs/space_small.json" \
         --tickers-file "$UNIVERSE" \
-        --method grid --trials 3 --min-train-years 10 --objective calmar \
+        --method grid --trials 3 --min-train-years 5 --objective calmar \
         --out "$OUT/oos_$name.json" "$@" > "$OUT/opt_$name.log" 2>&1
     status=$?
     # 실패를 조용히 넘기지 않는다 — 이 저장소의 지배적 실패 유형이다.
