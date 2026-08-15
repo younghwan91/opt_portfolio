@@ -60,7 +60,12 @@ def test_institutions_still_accepts_the_api_column_name():
 def test_daily_csv_converts_marketcap_from_millions():
     """daily.csv 의 marketcap/ev 는 백만 달러 단위 — 미환산 시 배수가 10⁶배 틀어진다."""
     raw = pd.DataFrame(
-        {"ticker": ["AAPL"], "date": ["2026-08-14"], "marketcap": [3_500_000.0], "ev": [3_400_000.0]}
+        {
+            "ticker": ["AAPL"],
+            "date": ["2026-08-14"],
+            "marketcap": [3_500_000.0],
+            "ev": [3_400_000.0],
+        }
     )
 
     out = _csv_daily(raw)
