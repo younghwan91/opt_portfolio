@@ -12,7 +12,7 @@
 
 | | **팩터 엔진** (`factor/`) | **VAA 자산배분** (`strategies/`·`analysis/`) |
 |---|---|---|
-| 대상 | 미국 개별주 (최대 21,962종목) | ETF 7~11종 |
+| 대상 | 미국 개별주 (21,963종목, 1997~2026) | ETF 7~11종 |
 | 질문 | 어떤 종목을 살까 | 어떤 자산군으로 갈아탈까 |
 | 데이터 | Sharadar 직판 (PIT · 상장폐지 포함) | yfinance 일간 종가 |
 | 진입점 | `opt-factor` · `opt-factor-tui` | `make run` · `run.py` |
@@ -138,12 +138,33 @@ opt-factor-tui --store us.duckdb --config configs/strategy_quantus_timed.json
   "backtest": {
     "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
     "hold_multiple": 1.0,                      // 매매 유예구간
+    "max_sector_weight": 1.0,                  // 섹터 비중 상한 (1 미만이면 물린다)
     "cost": {"commission_bps": 50, "slippage_bps": 0}
   },
-  "timing_ma_days": 200,                       // 마켓타이밍 오버레이
+  "timing_ma_days": 200,                       // 마켓타이밍 오버레이 (켜짐/꺼짐)
+  "target_vol": null,                          // 연속 변동성 타게팅
   "select_top_k": 0                            // >0 이면 학습 구간 내 팩터 선택
 }
 ```
+
+### 포트폴리오 구성 기법 — 무엇을 만들었고 무엇이 살아남았나
+
+**구현과 채택은 다르다.** 아래는 전부 테스트와 함께 들어와 있고, 판정 칸은
+walk-forward 가 이 유니버스에서 내린 답이다.
+
+| 기법 | 판정 |
+|---|---|
+| 마켓타이밍 오버레이 (Faber 200일 이평) | **채택** — 낙폭 −63.8% → −23.7% |
+| 균등가중 | **채택** — 최적화 6종을 전부 이겼다 (DeMiguel 1/N) |
+| 매매 유예구간 (`hold_multiple`) | **기각** — 회전율 −23% 대신 수익 −0.86%p |
+| 레짐 조건부 팩터 가중 | **기각** — 16.90% → 15.45%, 레짐당 표본 부족 |
+| 변동성 타게팅 (Moreira & Muir 2017) | 검증 중 |
+| 파라미터 앙상블 (`--ensemble k`) | 검증 중 |
+| 섹터 비중 상한 (`max_sector_weight`) | 검증 중 |
+
+뒤 세 개는 정교해 보여서가 아니라 **측정이 가리켜서** 만들었다 — 섹터 상한은
+실제 보유 포트폴리오가 Technology 32% 로 드러난 뒤에 썼다. 그건 아무도 선택하지
+않은 매크로 베팅이다.
 
 ## 검증 도구
 
@@ -216,7 +237,7 @@ src/opt_portfolio/
 
 ```bash
 make install        # uv sync --extra dev
-make test           # pytest + 커버리지 (254 tests)
+make test           # pytest + 커버리지 (297 tests)
 make lint           # ruff check + format --check
 make typecheck      # mypy src/
 ```

@@ -12,7 +12,7 @@ Two independent subsystems live in this repository.
 
 | | **Factor engine** (`factor/`) | **VAA allocation** (`strategies/`·`analysis/`) |
 |---|---|---|
-| Scope | US single stocks (up to 21,962 tickers) | 7–11 ETFs |
+| Scope | US single stocks (21,963 tickers, 1997–2026) | 7–11 ETFs |
 | Question | Which stocks to buy | Which asset class to rotate into |
 | Data | Sharadar direct (point-in-time, delisted included) | yfinance daily closes |
 | Entry point | `opt-factor` · `opt-factor-tui` | `make run` · `run.py` |
@@ -138,12 +138,33 @@ A strategy is fully declared by one JSON file.
   "backtest": {
     "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
     "hold_multiple": 1.0,                      // no-trade band
+    "max_sector_weight": 1.0,                  // sector cap (<1 to bind)
     "cost": {"commission_bps": 50, "slippage_bps": 0}
   },
-  "timing_ma_days": 200,                       // market-timing overlay
+  "timing_ma_days": 200,                       // market-timing overlay (on/off)
+  "target_vol": null,                          // continuous volatility targeting
   "select_top_k": 0                            // >0 selects factors inside the training window
 }
 ```
+
+### Portfolio construction — what is built, and what survived
+
+Implemented is not adopted. Each technique below ships with tests; the verdict column
+records what the walk-forward said about it on this universe.
+
+| Technique | Verdict |
+|---|---|
+| Market-timing overlay (Faber 200-day MA) | **Adopted** — drawdown −63.8% → −23.7% |
+| Equal weighting | **Adopted** — beat all six optimised schemes (DeMiguel 1/N) |
+| No-trade band (`hold_multiple`) | **Rejected** — turnover −23%, return −0.86pp |
+| Regime-conditional factor weights | **Rejected** — 16.90% → 15.45%, too few samples per regime |
+| Volatility targeting (Moreira & Muir 2017) | Under validation |
+| Parameter ensembling (`--ensemble k`) | Under validation |
+| Sector cap (`max_sector_weight`) | Under validation |
+
+The last three exist because measurement pointed at them, not because they sound sophisticated —
+e.g. the sector cap was written after the live portfolio turned out to be 32% Technology,
+which is a macro bet nobody chose to make.
 
 ## Validation tooling
 
@@ -216,7 +237,7 @@ src/opt_portfolio/
 
 ```bash
 make install        # uv sync --extra dev
-make test           # pytest + coverage (254 tests)
+make test           # pytest + coverage (297 tests)
 make lint           # ruff check + format --check
 make typecheck      # mypy src/
 ```

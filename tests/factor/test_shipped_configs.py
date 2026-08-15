@@ -42,6 +42,34 @@ class TestShippedStrategy:
         assert len(categories) >= 4, f"카테고리가 {categories} 뿐이다"
 
 
+class TestEveryShippedConfig:
+    """
+    `strategy.json` 하나만 검증하면 나머지 17개는 **실행할 때** 깨진다.
+    풀 히스토리 walk-forward 는 한 번에 몇 시간이라, 로딩 오류를 그때 알면
+    그 시간을 통째로 버린다.
+    """
+
+    @pytest.mark.parametrize(
+        "path", sorted(CONFIG_DIR.glob("strategy*.json")), ids=lambda p: p.name
+    )
+    def test_strategy_loads_and_resolves_every_factor(self, path: Path) -> None:
+        import opt_portfolio.factor.library  # noqa: F401
+
+        config = load_strategy(path)
+        unresolved = len(config.factors) - len(config.resolved_factors())
+
+        assert not unresolved, f"{path.name}: 팩터 {unresolved}개가 레지스트리에 없다"
+
+    @pytest.mark.parametrize("path", sorted(CONFIG_DIR.glob("space*.json")), ids=lambda p: p.name)
+    def test_space_loads_and_is_known_to_pipeline(self, path: Path) -> None:
+        from opt_portfolio.factor.pipeline import _BT_KEYS
+
+        space = load_space(path)
+        unknown = {k for k in space if k not in _BT_KEYS and not k.startswith("w_")}
+
+        assert not unknown, f"{path.name}: 파이프라인이 모르는 탐색 키 {sorted(unknown)}"
+
+
 class TestShippedSpace:
     def test_space_is_samplable(self) -> None:
         space = load_space(CONFIG_DIR / "space.json")

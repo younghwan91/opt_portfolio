@@ -55,15 +55,18 @@ make clean             # removes __pycache__, .coverage, htmlcov/, dist/, *.db
 
 ## 브랜치 전략
 
-- **`develop`** — 기능 개발 통합 브랜치. PR 머지 방식: **Squash merge** (커밋 히스토리 정리)
-- **`main`** — 안정 릴리즈 브랜치. `develop` → `main` PR로만 반영
+**`main` 이 단일 작업 브랜치다.** `develop` 은 존재하지 않는다 — 1인 저장소에서
+통합 브랜치는 관문 없이 단계만 늘린다. 큰 작업은 짧은 토픽 브랜치를 만들어
+main 으로 머지하고, dependabot PR 은 CI 통과 후 머지한다.
 
-> GitHub 저장소 설정에서 `develop` 브랜치의 "Allow squash merging"만 활성화하고 나머지(merge commit, rebase)는 비활성화할 것을 권장합니다.
+관문은 브랜치가 아니라 **CI(ruff · mypy · pytest) + CodeQL** 이고, 이건 실제로
+동작한다. 커밋 전에 `make lint` 를 돌린다 — `ruff check` 만 돌리면 `tests/` 의
+포맷 검사가 빠져 CI 에서 깨진다.
 
 
 Data flows through layered components:
 
-1. **Cache layer** (`src/opt_portfolio/core/cache.py`, `data_cache.py`) — DuckDB-backed incremental cache; only fetches missing date ranges from Yahoo Finance (`yfinance`). Also provides a standalone `DataCache` class in `data_cache.py`.
+1. **Cache layer** (`src/opt_portfolio/core/cache.py`) — DuckDB-backed incremental cache; only fetches missing date ranges from Yahoo Finance (`yfinance`).
 
 2. **Strategy layer** (`src/opt_portfolio/strategies/`)
    - `momentum.py` — Keller's weighted momentum formula: `12×(1M) + 4×(3M) + 2×(6M) + 1×(12M)`
@@ -106,4 +109,4 @@ All config lives in `src/opt_portfolio/config.py` as frozen dataclasses with glo
 Global constant of **5%** (2025 baseline) used for all Sharpe/Sortino calculations.
 
 ### Testing
-Tests live in `tests/` and match pattern `test_*.py`. Coverage is configured in `pyproject.toml` with branch coverage over `src/opt_portfolio`. The existing test suite covers configuration/validation only; strategy and backtest integration tests are not yet written.
+Tests live in `tests/` (VAA) and `tests/factor/` (팩터 엔진), pattern `test_*.py`. Coverage is configured in `pyproject.toml` with branch coverage over `src/opt_portfolio`. 현재 277 tests — 팩터 엔진 쪽은 PIT 불변식·벤더 계약·과최적화 정산처럼 **틀리면 조용히 틀리는 것**을 우선 덮는다.
