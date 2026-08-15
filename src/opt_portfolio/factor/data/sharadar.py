@@ -543,7 +543,18 @@ def _csv_tickers(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _csv_institutions(df: pd.DataFrame) -> pd.DataFrame:
+    """SF3A 벌크 CSV → 13F 티커 집계.
+
+    **벌크 CSV 의 분기 컬럼명은 `date` 다** (`holdings_ticker.csv` 실측 헤더:
+    `date,ticker,name,shrholders,…`). API 경로는 `_DIRECT_RENAME["SF3A"]` 가
+    `date → calendardate` 로 바꿔주지만 CSV 경로에는 그 리네임이 없어서,
+    이 함수는 실제 벌크 파일에 대해 한 번도 동작한 적이 없었다
+    (`KeyError: 'calendardate'`, 2026-08-15 실측). 스토어의 `institutions` 가
+    0행이었던 원인이다.
+    """
     frame = df.rename(columns=_SF3A_RENAME)
+    if "calendardate" not in frame.columns and "date" in frame.columns:
+        frame = frame.rename(columns={"date": "calendardate"})
     frame["datekey"] = pd.to_datetime(frame["calendardate"]) + pd.Timedelta(
         days=FILING_LAG_13F_DAYS
     )
