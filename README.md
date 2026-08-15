@@ -67,6 +67,24 @@ Cumulative 153.0× over the validation window. Holdings are not published — th
 
 Currently adopted strategy: US small caps, 8 factors + 200-day moving-average timing overlay, 20 stocks, quarterly rebalance, equal weight.
 
+### Before you believe that curve
+
+What is structurally sound: no look-ahead (parameters are chosen inside each training
+window and the validation window is run once), no survivorship bias (delisted names are
+in the universe), no restatements (first print wins), and 0.5% commission already deducted.
+
+What is **not** trustworthy at face value:
+
+| Assumption | Why it matters |
+|---|---|
+| **Slippage = 0** | Micro-cap ($5M–$80M) spreads run 1–5%. At 67% turnover per rebalance — 2.7 turns a year — **every 1% of round-trip slippage costs ~2.7%/yr.** Realistic spreads could take 5–8%/yr off this curve. That assumption is not data, and it has not been measured yet. |
+| **Capacity** | Value weighting cuts Sharpe by 28%, i.e. the alpha sits in the smallest names. At size this result does not exist. |
+| **Period concentration** | 2003–2007 alone compounded at 53%/yr — the steep early section of the chart. |
+| **Factor screening** | 124 factors were screened to pick 8. That search is not charged to the 72 trials the Deflated Sharpe deflates for. |
+
+The engineering is real; the number is optimistic. How optimistic is an open question
+until spreads are measured against the actual holdings.
+
 **The Deflated Sharpe is the number that matters here.** It subtracts the maximum Sharpe you would expect from pure noise given how many variants were tried, leaving what is actually left over. A strategy that cannot clear 0.95 is not adopted — more than twenty candidates were rejected at this gate in this repository.
 
 The full record is in [`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md) (Korean).
@@ -266,7 +284,7 @@ Design documents are written in Korean and live in [`docs/factor-system/`](docs/
 
 **Factor engine**
 
-- The **micro-cap universe** carries wide bid-ask spreads. The backtest assumes 0.5% commission and zero slippage — *that assumption is not data.*
+- The **micro-cap universe** carries wide bid-ask spreads. The backtest assumes 0.5% commission and **zero slippage** — *that assumption is not data.* Sizing it: 2.7 portfolio turns a year means every 1% of round-trip slippage costs ~2.7%/yr, so plausible spreads erase 5–8%/yr. Measuring realised spreads against the actual holdings is the single most valuable open task in this repository.
 - **Capacity is limited.** Switching to value weighting cuts Sharpe by 28%, which means the alpha sits in small names. The result will not survive at institutional size.
 - **Factor selection is not charged to the Deflated Sharpe trial count.** Screening 124 factors and picking a handful is itself a search (`research/selection.py` exists to repay this debt).
 - Taxes are not modelled.
