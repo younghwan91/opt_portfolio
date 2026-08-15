@@ -43,22 +43,23 @@
 
 <!-- PERFORMANCE:START -->
 
-*Adopted strategy · walk-forward out-of-sample · 2007-12 – 2026-08 (18.6y)*
+*채택 전략 · walk-forward 검증 구간 · 2007-12 – 2026-08 (18.6년)*
 
-| Metric | Strategy | SPY (same window) |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/performance-dark.png">
+  <img alt="walk-forward 검증 성과 — SPY 대비" src="docs/images/performance-light.png">
+</picture>
+
+| 지표 | 전략 | SPY (같은 구간) |
 |---|---|---|
-| CAGR | **16.90%** | 11.36% |
-| Max drawdown | **-23.7%** | -52.3% |
-| Volatility | **15.7%** | 19.8% |
+| 연평균 수익률 | **16.90%** | 11.36% |
+| 최대낙폭 | **-23.7%** | -52.3% |
+| 변동성 | **15.7%** | 19.8% |
 | Sharpe | **0.756** | 0.390 |
 | Calmar | **0.71** | 0.22 |
-| **Deflated Sharpe** (57 trials) | **0.992** ✓ | — |
+| **Deflated Sharpe** (시도 57회) | **0.992** ✓ | — |
 
-```
-▁▁▁▁▁▁▂▂▂▂▃▂▃▃▃▃▃▃▃▄▄▄▄▄▄▃▃▃▄▄▄▄▅▅▅▅▅▅▅▅▅▆▆▇▇▇▇▇▇▇▇▇▇▇▇█▇████
-```
-
-Cumulative 18.2× over the validation window. Holdings are not published — the universe is micro-cap and crowding would move the entry price.
+검증 구간 누적 18.2배. **보유 종목은 공개하지 않는다** — 초소형주라 공개 추천이 몰리면 자신의 체결가가 나빠진다.
 
 <!-- PERFORMANCE:END -->
 
@@ -158,9 +159,9 @@ walk-forward 가 이 유니버스에서 내린 답이다.
 | 균등가중 | **채택** — 최적화 6종을 전부 이겼다 (DeMiguel 1/N) |
 | 매매 유예구간 (`hold_multiple`) | **기각** — 회전율 −23% 대신 수익 −0.86%p |
 | 레짐 조건부 팩터 가중 | **기각** — 16.90% → 15.45%, 레짐당 표본 부족 |
-| 변동성 타게팅 (Moreira & Muir 2017) | 검증 중 |
-| 파라미터 앙상블 (`--ensemble k`) | 검증 중 |
-| 섹터 비중 상한 (`max_sector_weight`) | 검증 중 |
+| 변동성 타게팅 (Moreira & Muir 2017) | **기각** — 단독으로 쓰면 타이밍을 아예 안 한 것보다 나쁘다 (Sharpe 0.513 → 0.396) |
+| 파라미터 앙상블 (`--ensemble k`) | **기각** — 표에서 CAGR 은 제일 높지만 낙폭 −23.7 → −30.6%, Calmar 0.71 → 0.60 |
+| 섹터 비중 상한 (`max_sector_weight`) | **성과 중립** — 차이가 0 과 구분되지 않는다 (t = 0.77). 수익 장치가 아니라 위험 장치로 남긴다 |
 
 뒤 세 개는 정교해 보여서가 아니라 **측정이 가리켜서** 만들었다 — 섹터 상한은
 실제 보유 포트폴리오가 Technology 32% 로 드러난 뒤에 썼다. 그건 아무도 선택하지

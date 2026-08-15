@@ -45,6 +45,11 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 
 *Adopted strategy · walk-forward out-of-sample · 2007-12 – 2026-08 (18.6y)*
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/performance-dark.png">
+  <img alt="Walk-forward out-of-sample performance versus SPY" src="docs/images/performance-light.png">
+</picture>
+
 | Metric | Strategy | SPY (same window) |
 |---|---|---|
 | CAGR | **16.90%** | 11.36% |
@@ -53,10 +58,6 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 | Sharpe | **0.756** | 0.390 |
 | Calmar | **0.71** | 0.22 |
 | **Deflated Sharpe** (57 trials) | **0.992** ✓ | — |
-
-```
-▁▁▁▁▁▁▂▂▂▂▃▂▃▃▃▃▃▃▃▄▄▄▄▄▄▃▃▃▄▄▄▄▅▅▅▅▅▅▅▅▅▆▆▇▇▇▇▇▇▇▇▇▇▇▇█▇████
-```
 
 Cumulative 18.2× over the validation window. Holdings are not published — the universe is micro-cap and crowding would move the entry price.
 
@@ -158,9 +159,9 @@ records what the walk-forward said about it on this universe.
 | Equal weighting | **Adopted** — beat all six optimised schemes (DeMiguel 1/N) |
 | No-trade band (`hold_multiple`) | **Rejected** — turnover −23%, return −0.86pp |
 | Regime-conditional factor weights | **Rejected** — 16.90% → 15.45%, too few samples per regime |
-| Volatility targeting (Moreira & Muir 2017) | Under validation |
-| Parameter ensembling (`--ensemble k`) | Under validation |
-| Sector cap (`max_sector_weight`) | Under validation |
+| Volatility targeting (Moreira & Muir 2017) | **Rejected** — alone it is worse than no timing at all (Sharpe 0.513 → 0.396) |
+| Parameter ensembling (`--ensemble k`) | **Rejected** — highest CAGR in the table, but drawdown −23.7% → −30.6% and Calmar 0.71 → 0.60 |
+| Sector cap (`max_sector_weight`) | **Performance-neutral** — difference from zero is not measurable (t = 0.77); kept as a risk control, not a return driver |
 
 The last three exist because measurement pointed at them, not because they sound sophisticated —
 e.g. the sector cap was written after the live portfolio turned out to be 32% Technology,
