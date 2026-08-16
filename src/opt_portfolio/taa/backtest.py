@@ -133,9 +133,22 @@ def run_with_ma_overlay(
     """
     base = run_backtest(spec, daily, **kwargs)  # type: ignore[arg-type]
     ma = daily[benchmark].rolling(ma_days, min_periods=ma_days).mean()
-    invested = (daily[benchmark] > ma).resample("ME").last().shift(1).fillna(True)
+    # 불리언을 nullable "boolean" dtype 으로 유지해야 한다. 일반 bool 은 NaN 을
+    # 못 담아 shift/reindex 가 만든 결측을 object dtype 으로 승격시키고, 뒤이은
+    # fillna 가 그걸 다시 bool 로 내리며 FutureWarning(silent downcasting)을
+    # 낸다 — Task 4 가 이 패키지 전체에서 없앤 경고를 되살리는 셈이라 여기서
+    # 명시적으로 막는다.
+    invested = (
+        (daily[benchmark] > ma)
+        .resample("ME")
+        .last()
+        .astype("boolean")
+        .shift(1)
+        .fillna(True)
+        .astype(bool)
+    )
 
-    aligned = invested.reindex(base.returns.index).fillna(True).astype(bool)
+    aligned = invested.reindex(base.returns.index).astype("boolean").fillna(True).astype(bool)
     returns = base.returns.where(aligned, 0.0)
     return BacktestOutput(
         returns=returns,
@@ -149,6 +162,9 @@ def run_with_tranches(
     spec: StrategySpec,
     daily: pd.DataFrame,
     n_tranches: int = 4,
+    ma_overlay: bool = False,
+    benchmark: str = "SPY",
+    ma_days: int = 200,
     **kwargs: object,
 ) -> BacktestOutput:
     """자본을 `n_tranches` 로 나눠 서로 다른 주에 리밸런싱한 평균.
@@ -161,6 +177,15 @@ def run_with_tranches(
     유효 구간이 평이 기준보다 짧아진다(달의 경계를 넘는 절단이 조용히 발생).
     그래서 끝단에 마지막 관측치를 이월한 여분의 영업일을 붙여 시프트한 뒤,
     원래 날짜 범위로 다시 잘라 모든 트랜치가 같은 구간을 덮게 만든다.
+
+    `ma_overlay=True` 면 이평 오버레이를 **트랜치마다 개별 적용한 뒤 평균**낸다
+    (평균부터 낸 뒤 오버레이를 씌우는 순서가 아니다). 두 순서는 동치가 아니다 —
+    평균 후 적용은 모든 슬리브를 한 덩어리로 취급해 같은 달에 다 같이 현금으로
+    빠지거나 다 같이 투자 상태가 되고, 이는 "네 개의 독립적으로 리밸런싱되는
+    슬리브"라는 트랜치의 전제 자체를 무너뜨린다. 슬리브마다 자신이 보는 가격
+    경로(오프셋만큼 시프트된 것)로 자신의 이평 판정을 내리게 해야, 서로 다른
+    주에 서로 다른 방어 타이밍을 갖는다는 트랜치의 취지가 오버레이와 결합해도
+    유지된다.
     """
     pad = (n_tranches - 1) * 5
     if pad > 0:
@@ -172,7 +197,12 @@ def run_with_tranches(
     outs = []
     for offset in range(n_tranches):
         shifted = padded.shift(-offset * 5).reindex(daily.index)
-        outs.append(run_backtest(spec, shifted, **kwargs))  # type: ignore[arg-type]
+        if ma_overlay:
+            outs.append(
+                run_with_ma_overlay(spec, shifted, benchmark=benchmark, ma_days=ma_days, **kwargs)
+            )
+        else:
+            outs.append(run_backtest(spec, shifted, **kwargs))  # type: ignore[arg-type]
 
     common = outs[0].returns.index
     for o in outs[1:]:

@@ -98,3 +98,23 @@ class TestTranches:
         spread = run_with_tranches(SPEC, daily, cost_bps=0.0)
 
         assert spread.returns.index.equals(plain.returns.index)
+
+
+class TestComposition:
+    def test_tranches_with_ma_overlay_differs_from_either_alone(self) -> None:
+        """`baa_bal_ma_tranche` 처럼 두 변형을 겹쳐 쓰는 구성이 실제로 존재한다
+        (`registry.MA_OVERLAY` 와 `registry.TRANCHE` 양쪽에 다 들어있다). 겹쳐
+        쓰기가 조용히 트랜치만 적용하고 오버레이를 빼먹으면 (또는 그 반대면)
+        구성 9번이 구성 8번의 숫자를 그대로 복제하게 된다 — 이게 실측으로
+        재현된 회귀였다. 합성 결과가 두 단일 변형 중 어느 쪽과도 같지 않아야
+        진짜로 둘 다 반영됐다고 볼 수 있다.
+        """
+        daily = _crash_then_recover()
+        tranche_only = run_with_tranches(SPEC, daily, cost_bps=0.0)
+        overlay_only = run_with_ma_overlay(SPEC, daily, cost_bps=0.0)
+        composed = run_with_tranches(SPEC, daily, ma_overlay=True, cost_bps=0.0)
+
+        c1 = tranche_only.returns.index.intersection(composed.returns.index)
+        c2 = overlay_only.returns.index.intersection(composed.returns.index)
+        assert not np.allclose(tranche_only.returns.reindex(c1), composed.returns.reindex(c1))
+        assert not np.allclose(overlay_only.returns.reindex(c2), composed.returns.reindex(c2))
