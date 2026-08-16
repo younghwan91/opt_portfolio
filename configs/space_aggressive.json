@@ -1,0 +1,6 @@
+{
+  "n_stocks": ["cat", [10, 15, 20]],
+  "weighting": ["cat", ["equal", "inverse_vol", "risk_parity", "black_litterman"]],
+  "max_weight": ["float", 0.10, 0.25],
+  "view_confidence": ["float", 0.2, 2.0]
+}
