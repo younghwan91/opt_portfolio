@@ -5,6 +5,13 @@
 기존 `strategies/`(VAA·OU), `analysis/`, `core/` 는 보존 대상이다.
 공유하는 것은 `analysis/metrics.py`, `analysis/risk.py`, `utils/visualization.py` 뿐이다.
 
+**세 번째 서브시스템 `taa/` 가 있다** (2026-08-17). ETF 전술적 배분이며
+`factor/` 도 `strategies/` 도 아니다. **격리 규칙의 예외를 하나 열었다** —
+`taa/` 는 `factor.research.overfitting`(DSR·PBO)을 import 한다. 그 함수들이
+평범한 수익률 시계열만 받아 결합이 얇고, 관문 없이 만든 성과를 믿지 않는 것이
+이 저장소의 규약이기 때문이다. 다른 방향의 import 는 금지한다. 결과는
+`docs/taa/01-results.md` — 9개 구성 사전등록, PBO 관문, 채택 0개.
+
 ## 명령어
 
 ```bash
