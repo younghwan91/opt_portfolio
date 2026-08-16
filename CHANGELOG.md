@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   전체를 걸던 것을, 상위 k개 파라미터의 검증 수익률 평균으로 바꾼다.
   `n_stocks` 가 폴드에 따라 15↔47 로 널뛴 것이 동기다.
 - **섹터 비중 상한** (`max_sector_weight`) — 팩터는 섹터 중립화하는데 최종
-  포트폴리오의 섹터 비중은 아무도 보지 않았다. 실제 보유 19종목 중 6종목이
+  포트폴리오의 섹터 비중은 아무도 보지 않았다. 실제 보유 종목 중 32% 가
   Technology 였다 — 팩터 베팅이 아니라 의도하지 않은 매크로 베팅이다.
 - `scripts/update_readme_performance.py` — README 성과 표·그래프를 저장된 OOS
   수익률에서 생성한다. 종목명은 쓰지 않는다.

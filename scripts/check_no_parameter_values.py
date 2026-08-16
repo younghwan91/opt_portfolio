@@ -39,11 +39,19 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # 조사 `을/씩/만` 을 요구해 데이터 행수 서술("21,962종목")과 구분하고,
     # 사이에 부사구가 끼어도 잡히게 최대 세 어절까지 건너뛴다. 처음 쓴 패턴은
     # 붙어 있는 경우만 잡아서 실제 유출 문장을 통과시켰다.
+    # 보유 종목 수 특정. 처음에는 "N종목을 … 담고" 형태만 잡았는데, 조사가
+    # 바뀌면(`20종목 균등가중`, `20종목도 못 채움`) 그대로 빠져나갔다 — 실제로
+    # 두 문장을 통과시켰다. 이제 **두 자리 이하 숫자 + 종목** 을 전부 잡는다.
+    #
+    # 앞에 숫자·쉼표가 오면 제외해 데이터 행수 서술과 구분한다
+    # ("6,895종목"·"21,962종목" 은 유니버스 크기라 공개 대상이다).
+    ("보유 종목 수 특정", re.compile(r"(?<![\d,.])[1-9]\d?\s*종목")),
     (
-        "보유 종목 수 특정",
-        re.compile(r"\d+\s*종목(?:을|씩|만)\s*(?:\S+\s+){0,3}?(?:담|보유|골|사)"),
+        "holdings count disclosed",
+        re.compile(
+            r"\b(?:holds?|holding)\s+\d{1,2}\s+(?:stocks?|names?)\b|\b\d{1,2}\s+names?\b", re.I
+        ),
     ),
-    ("holdings count disclosed", re.compile(r"\bholds?\s+\d+\s+stocks?\b", re.I)),
 ]
 
 #: 검사에서 제외할 경로. 스키마·기본값 문서는 값이 아니라 **필드의 존재**를
@@ -57,6 +65,14 @@ EXEMPT = (
     "configs/strategy.json",  # 합성 예제 (중대형주 밴드)
     "scripts/check_no_parameter_values.py",  # 이 파일
 )
+
+#: 경로 접두사 단위 면제.
+#:
+#: 테스트 픽스처는 합성 포트폴리오를 쓴다 — 거기 적힌 종목 수는 채택 전략과
+#: 무관하고, 오탐을 피하려고 픽스처를 비틀면 테스트가 읽히지 않는다.
+#: 다만 **면제는 파일 성격에만 준다**. 실제로 `test_sector_cap.py` 는 채택
+#: 전략의 실측 보유 수를 적고 있었고 그건 면제 전에 고쳤다.
+EXEMPT_PREFIXES = ("tests/",)
 
 #: 공개하기로 판단한 값과 그 근거.
 #:
@@ -96,7 +112,7 @@ def scan(path: Path) -> list[str]:
 def main(argv: list[str]) -> int:
     hits: list[str] = []
     for name in argv:
-        if name in EXEMPT:
+        if name in EXEMPT or name.startswith(EXEMPT_PREFIXES):
             continue
         hits.extend(scan(Path(name)))
 

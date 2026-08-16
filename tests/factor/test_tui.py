@@ -22,7 +22,7 @@ class TestStrategySummary:
             json.dumps(
                 {
                     "factors": ["A", "B", "C"],
-                    "backtest": {"n_stocks": 20, "rebalance": "QE", "weighting": "equal"},
+                    "backtest": {"n_stocks": 7, "rebalance": "QE", "weighting": "equal"},
                     "timing_ma_days": 200,
                 }
             )
@@ -31,7 +31,7 @@ class TestStrategySummary:
         text = _describe(path)
 
         assert "팩터 3개" in text
-        assert "20종목" in text
+        assert "7종목" in text
         assert "QE" in text
         assert "타이밍 200일" in text
 
