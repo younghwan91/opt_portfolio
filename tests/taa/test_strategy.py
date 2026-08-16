@@ -111,3 +111,56 @@ class TestSelectWeights:
         w = select_weights(spec, mom, sel, D)
 
         assert w == {"EEM": 1.0}  # 13612W 기준이라 EEM
+
+    def test_cash_tie_boundary_replaces_defensive_asset(self) -> None:
+        """Regression: cash-tie boundary untested.
+
+        IEF 가 BIL 과 정확히 같으면 현금으로 바뀌어야 한다.
+        If the comparison were `>=` instead of `>`, this test would pass
+        but should fail — catching the boundary bug.
+        """
+        spec = StrategySpec(
+            name="test_tie",
+            canary=("SPY",),
+            offensive=(),
+            defensive=("IEF",),
+            top_n_offensive=0,
+            top_n_defensive=1,
+            selection="sma13",
+            cash_ticker="BIL",
+        )
+        mom, sel = _frames(
+            {"SPY": -0.1, "IEF": 0.0, "BIL": 0.0},
+            {"IEF": 1.00, "BIL": 1.00},  # IEF 와 BIL 이 정확히 같음
+        )
+        w = select_weights(spec, mom, sel, D)
+
+        # IEF 가 cash 를 이기지 못하면 BIL 로 바뀌어야 함
+        assert w == {"BIL": 1.0}
+
+    def test_multi_pick_collapse_to_same_cash(self) -> None:
+        """Regression: multi-pick collapse to same cash ticker untested.
+
+        두 방어 자산이 모두 현금을 못 이기면 둘 다 현금으로 바뀌어서
+        결과는 {BIL: 1.0} 이고 합은 정확히 1.0 이어야 한다.
+        If the code used dict assignment instead of accumulation,
+        the weights would be 0.5 instead of 1.0 — returns would halve silently.
+        """
+        spec = StrategySpec(
+            name="test_multi_collapse",
+            canary=("SPY",),
+            offensive=(),
+            defensive=("IEF", "TLT"),
+            top_n_offensive=0,
+            top_n_defensive=2,
+            selection="sma13",
+            cash_ticker="BIL",
+        )
+        mom, sel = _frames(
+            {"SPY": -0.1, "IEF": 0.0, "TLT": 0.0, "BIL": 0.0},
+            {"IEF": 0.95, "TLT": 0.98, "BIL": 1.00},  # 둘 다 BIL 을 못 이김
+        )
+        w = select_weights(spec, mom, sel, D)
+
+        assert w == {"BIL": 1.0}
+        assert sum(w.values()) == 1.0
