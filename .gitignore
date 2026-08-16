@@ -14,13 +14,21 @@ wheels/
 *.db
 *.duckdb
 
-# 벤더 데이터 — 이 저장소는 PUBLIC 이다. Sharadar 데이터는 유료 구독물이며
-# 재배포 대상이 아니므로, 실수로 커밋되지 않게 경로 단위로 막는다.
+# 벤더 데이터 — 이 저장소는 PUBLIC 이다. Sharadar 원본은 **유료 구독물이라
+# 재배포할 수 없다.** 이건 공개 방침의 문제가 아니라 라이선스 문제이므로,
+# 나머지를 전부 열어도 이 둘만은 계속 막는다.
+#
+#   ~/data/sharadar/*.zip   벤더 벌크 원본 (6.7GB)
+#   ~/data/us_micro.duckdb  그 적재 결과 (2.1GB)
+#
+# 반면 **우리가 계산한 산출물**(walk-forward 수익률 시계열·IC 표·유니버스
+# 목록)은 `results/` 에 공개한다 — 그것이 있어야 남이 성과를 검증할 수 있다.
 *.csv
 *.csv.gz
 *.zip
 tests/factor/fixtures/sharadar/
 !configs/*.csv
+!results/**/*.csv
 
 # 운용 파라미터는 전부 공개한다 (2026-08-16 결정, `configs/README.md`).
 #
