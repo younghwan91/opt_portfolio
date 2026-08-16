@@ -61,4 +61,19 @@ run cost_slip150 "$CONFIGS/strategy_cost_slip150.json"
 run cost_guards "$CONFIGS/strategy_cost_guards.json"
 run band_8_150 "$CONFIGS/strategy_band_8_150.json"
 run roll5 "$CONFIGS/strategy_quantus_timed.json" --train-window 5
+
+# 아래쪽 사다리 — 밴드를 올리면 무너진다는 §3.4 의 반대편.
+#
+# **예상을 먼저 적는다: 셋 다 백테스트 성과가 오를 것이다.** 그리고 그 개선은
+# 이 저장소에서 가장 못 믿을 숫자다. `universe/filters.py` 가 하한을 "선택이
+# 아니라 방어" 라고 적어둔 이유가 이것이고(Hou·Xue·Zhang 2020), 체결 불가능한
+# 초소형이 극단 분위수를 채우면 균등가중 백테스트는 조용히 부풀려진다.
+#
+# 그래서 `band_down06_guards` 가 이 묶음의 존재 이유다 — 같은 밴드를 방어
+# 켠 채로 돌린다. 켜고도 남으면 진짜고, 켜면 사라지면 위 셋은 신기루다.
+# 방어 없는 셋만 돌리고 "더 좋다" 고 적는 것이 정확히 §2.2 가 저지른 실수다.
+run band_down06 "$CONFIGS/strategy_band_down06.json"
+run band_down04 "$CONFIGS/strategy_band_down04.json"
+run band_cap_half "$CONFIGS/strategy_band_cap_half.json"
+run band_down06_guards "$CONFIGS/strategy_band_down06_guards.json"
 echo "전체 완료 $(date +%H:%M:%S)"
