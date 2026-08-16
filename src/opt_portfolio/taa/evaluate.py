@@ -117,8 +117,21 @@ def evaluate_all(
     return metrics, matrix
 
 
-def verdict(metrics: pd.DataFrame, pbo: float, baseline_calmar: float) -> pd.DataFrame:
-    """채택 기준 적용. 하나라도 못 넘으면 기각하고 이유를 적는다."""
+def verdict(
+    metrics: pd.DataFrame,
+    pbo: float,
+    baseline_calmar: float,
+    baseline_name: str | None = None,
+) -> pd.DataFrame:
+    """채택 기준 적용. 하나라도 못 넘으면 기각하고 이유를 적는다.
+
+    `baseline_name` 을 넘기면 그 행(보통 60/40)에는 Calmar-vs-베이스라인
+    관문을 적용하지 않는다. 베이스라인은 후보가 비교당하는 **기준선**이지
+    그 자신과 비교될 후보가 아니다 — `calmar <= baseline_calmar` 는
+    베이스라인 자신에게 늘 참이라(자기 자신과 "초과"가 성립할 수 없다)
+    이 예외가 없으면 static_60_40 은 다른 성적과 무관하게 항상 기각된다.
+    지정하지 않으면(`None`) 전 행에 동일하게 적용된다 — 기존 동작 그대로다.
+    """
     rows = []
     for name, row in metrics.iterrows():
         reasons: list[str] = []
@@ -128,7 +141,7 @@ def verdict(metrics: pd.DataFrame, pbo: float, baseline_calmar: float) -> pd.Dat
             reasons.append(f"MDD {row['mdd']:.1%} 가 한도 초과")
         if row["dsr"] < ADOPTION["dsr_gate"]:
             reasons.append(f"DSR {row['dsr']:.3f} < {ADOPTION['dsr_gate']}")
-        if row["calmar"] <= baseline_calmar:
+        if name != baseline_name and row["calmar"] <= baseline_calmar:
             reasons.append(f"Calmar {row['calmar']:.2f} 가 60/40({baseline_calmar:.2f}) 이하")
         rows.append({"name": name, "adopted": not reasons, "reason": " · ".join(reasons) or "—"})
     return pd.DataFrame(rows).set_index("name")
