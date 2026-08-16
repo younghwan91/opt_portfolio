@@ -8,6 +8,7 @@ import pytest
 
 from opt_portfolio.taa.backtest import (
     BacktestOutput,
+    _build_tranche_sleeves,
     run_backtest,
     run_with_ma_overlay,
     run_with_tranches,
@@ -24,6 +25,20 @@ SPEC = StrategySpec(
     top_n_offensive=0,
     top_n_defensive=0,
     static_weights={"SPY": 1.0},
+)
+
+#: 신호(SMA13) 로 A/B 중 하나를 고르는 스펙. `SPEC` 은 정적 100% SPY 라
+#: 신호 관측일이 언제든 결정이 절대 안 바뀐다 — 트랜치가 존재 이유로 삼는
+#: "타이밍에 따라 다른 결정" 자체가 나올 수 없는 퇴화 케이스다. 트랜치의
+#: 효과(그리고 그 한계)를 재려면 실제로 신호에 반응하는 스펙이 필요하다.
+SIGNAL_SPEC = StrategySpec(
+    name="pick",
+    canary=(),
+    offensive=("A", "B"),
+    defensive=("A", "B"),
+    top_n_offensive=1,
+    top_n_defensive=1,
+    selection="sma13",
 )
 
 
@@ -57,20 +72,23 @@ def _first_month_loss() -> pd.DataFrame:
     return pd.DataFrame({"SPY": px, "IEF": np.full(len(idx), 100.0)}, index=idx)
 
 
-def _crash_then_recover_noisy() -> pd.DataFrame:
-    """`_crash_then_recover` + 일별 잡음.
-
-    순수 결정론적 램프에서는 모든 트랜치가 (오프셋만 다를 뿐) 같은 모양의
-    경로를 보고 같은 월말 수익을 뽑아낸다 — 분산 축소 효과를 측정할 신호
-    자체가 없다. 잡음을 얹어야 "어느 요일에 리밸런싱했는지"가 실제로
-    갈리고, 트랜치 평균이 분산을 줄인다는 주장을 통계적으로 검증할 수 있다.
-    시드 고정으로 재현 가능하다.
+def _dual_asset_noisy(seed: int = 27, noise: float = 5.0) -> pd.DataFrame:
+    """A·B 두 자산이 같은 추세를 타지만 잡음 때문에 SMA13 순위가 이따금
+    뒤집힌다. `SIGNAL_SPEC` 이 매달 둘 중 하나를 골라 전액 투자하므로,
+    순위가 뒤집히는 달에는 신호 관측일(트랜치 오프셋)에 따라 실제로 다른
+    자산이 뽑힌다 — 그래야 트랜치의 타이밍-분산 축소 효과를 측정할 신호가
+    생긴다. seed=27, noise=5.0 은 사전 탐색으로 고른 값으로, 이 파라미터에서
+    (1) 트랜치 평균 std 가 plain 대비 뚜렷이(약 14%) 줄고 (2) 슬리브 간
+    최소 쌍별 상관계수가 0.7 을 넘는다 — 두 조건을 동시에 만족하는 재현
+    가능한 케이스가 필요해서 무작위로 고르지 않고 그리드 서치로 찾았다.
     """
-    daily = _crash_then_recover()
-    rng = np.random.default_rng(42)
-    noisy = daily.copy()
-    noisy["SPY"] = daily["SPY"] + rng.normal(0.0, 1.5, len(daily))
-    return noisy
+    n = 40 * 21
+    idx = pd.date_range("2010-01-01", periods=n, freq="B")
+    rng = np.random.default_rng(seed)
+    base = np.linspace(100, 200, n)
+    a = base + rng.normal(0.0, noise, n).cumsum() * 0.05
+    b = base + rng.normal(0.0, noise, n).cumsum() * 0.05
+    return pd.DataFrame({"A": a, "B": b}, index=idx)
 
 
 class TestMaOverlay:
@@ -95,29 +113,37 @@ class TestMaOverlay:
 
 
 class TestTranches:
+    """`SPEC`(정적 100% SPY)은 이 슬리브 테스트들에 못 쓴다 — 정적 배분은
+    신호 관측일이 언제든 매달 같은 결정을 내리므로, 어느 슬리브를 골라도
+    실현 수익이 완전히 동일하다(트랜치가 plain 과 정확히 같아짐). 그래서
+    `SIGNAL_SPEC` + `_dual_asset_noisy` 로, 관측일에 따라 실제로 다른
+    자산이 뽑히는 상황을 만든다.
+    """
+
     def test_tranche_returns_have_lower_dispersion(self) -> None:
-        """트랜치는 수익을 좇는 게 아니라 분산을 줄이는 장치다.
-
-        결정론적 램프(`_crash_then_recover`)에서는 모든 오프셋이 같은 모양의
-        경로를 보므로 분산 축소가 통계적으로 드러나지 않는다 — 잡음을 얹은
-        `_crash_then_recover_noisy` 로 실제 마진(≈0.84배, 사전 실측)을 확인한다.
-        1.01배 같은 느슨한 상한은 "트랜치 0 만 반환"하는 고장에도 통과하므로
-        (오프셋 0 == plain 이라 정확히 1.0배) 실질적 개선을 요구하는 0.95배로 조인다.
+        """트랜치는 수익을 좇는 게 아니라 분산을 줄이는 장치다 — 다만 실제
+        구현(모든 슬리브가 같은 달력월의 진짜 가격을 공유)에서는 그 축소폭이
+        작다. 예전 버전은 슬리브마다 아예 다른 시간 구간의 수익을 평균 내는
+        착시로 큰 축소를 보였다(사전 실측 0.84배) — 옳게 고치면 그 착시가
+        사라진다. `_dual_asset_noisy` 는 사전 그리드서치로 고른 파라미터라
+        여전히 뚜렷한(≈0.86배) 축소를 보이지만, 상한을 1.0 에 바짝 붙이면
+        "슬리브 0(=plain)만 반환"하는 고장도 통과하므로 실질적 개선을
+        요구하는 0.9배로 조인다.
         """
-        daily = _crash_then_recover_noisy()
-        plain = run_backtest(SPEC, daily, cost_bps=0.0)
-        spread = run_with_tranches(SPEC, daily, cost_bps=0.0)
+        daily = _dual_asset_noisy()
+        plain = run_backtest(SIGNAL_SPEC, daily, cost_bps=0.0)
+        spread = run_with_tranches(SIGNAL_SPEC, daily, cost_bps=0.0)
 
-        assert spread.returns.std() < plain.returns.std() * 0.95
+        assert spread.returns.std() < plain.returns.std() * 0.9
 
     def test_tranche_returns_differ_from_any_single_tranche(self) -> None:
         """평균이 트랜치 하나(예: 오프셋 0)로 몰래 대체돼도 std 상한만으론
         못 잡을 수 있다 — 오프셋 0 은 plain 과 정확히 같아서다. 값 자체를
         직접 대조해 "평균"이 실제로 4개를 섞었는지 확인한다.
         """
-        daily = _crash_then_recover_noisy()
-        plain = run_backtest(SPEC, daily, cost_bps=0.0)
-        spread = run_with_tranches(SPEC, daily, cost_bps=0.0)
+        daily = _dual_asset_noisy()
+        plain = run_backtest(SIGNAL_SPEC, daily, cost_bps=0.0)
+        spread = run_with_tranches(SIGNAL_SPEC, daily, cost_bps=0.0)
 
         common = spread.returns.index.intersection(plain.returns.index)
         assert not np.allclose(spread.returns.reindex(common), plain.returns.reindex(common))
@@ -128,6 +154,38 @@ class TestTranches:
         spread = run_with_tranches(SPEC, daily, cost_bps=0.0)
 
         assert spread.returns.index.equals(plain.returns.index)
+
+
+class TestTrancheSleeveCorrelation:
+    """슬리브가 진짜 트랜치(같은 시장을 다른 관측일로 보는 것)인지, 아니면
+    그냥 서로 다른 기간의 수익률을 평균 낸 스무딩인지를 가른다.
+
+    네 슬리브는 같은 전략을 같은 자산에, 겨우 며칠 어긋난 관측일로 돌린다
+    — 상관관계가 낮을 이유가 없다. 예전 구현(전체 가격 패널을 통째로
+    `shift`)은 슬리브 0↔3 이 실측 상관계수 0.076 까지 떨어졌다 — 사실상
+    무관한 두 시계열처럼 보였다는 뜻이고, 그게 인위적인 분산 축소(따라서
+    부풀려진 Calmar·PBO)의 원인이었다. 이 테스트가 없으면 그 착시가 다시
+    "성공"으로 통과한다.
+    """
+
+    def test_sleeve_pairwise_correlations_stay_high(self) -> None:
+        daily = _dual_asset_noisy()
+        sleeves = _build_tranche_sleeves(
+            SIGNAL_SPEC,
+            daily,
+            n_tranches=4,
+            ma_overlay=False,
+            benchmark="SPY",
+            ma_days=200,
+            start=None,
+            end=None,
+            cost_bps=0.0,
+        )
+        matrix = pd.DataFrame({i: s.returns for i, s in enumerate(sleeves)}).dropna(how="any")
+        corr = matrix.corr().to_numpy()
+        off_diagonal = corr[~np.eye(len(sleeves), dtype=bool)]
+
+        assert off_diagonal.min() > 0.7
 
 
 class TestComposition:

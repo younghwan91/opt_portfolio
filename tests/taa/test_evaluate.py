@@ -76,6 +76,49 @@ class TestVerdict:
         assert ADOPTION["dsr_gate"] == 0.95
         assert ADOPTION["pbo_limit"] == 0.5
 
+    def test_baseline_row_is_not_rejected_against_its_own_calmar(self) -> None:
+        """`baseline_calmar` 는 static_60_40 자신의 Calmar 에서 뽑는다. 그
+        행에도 `calmar <= baseline_calmar` 를 그대로 적용하면 자기 자신과
+        비교해 "초과"가 성립할 수 없어 다른 성적과 무관하게 항상 기각된다
+        — `baseline_name` 으로 그 행만 이 관문에서 뺀다.
+        """
+        m = pd.DataFrame(
+            [
+                {"name": "static_60_40", "mdd": -0.15, "calmar": 0.5, "dsr": 0.99},
+                {"name": "b", "mdd": -0.15, "calmar": 0.4, "dsr": 0.99},
+            ]
+        ).set_index("name")
+        out = verdict(m, pbo=0.1, baseline_calmar=0.5, baseline_name="static_60_40")
+
+        assert out.loc["static_60_40", "adopted"]
+        assert "60/40" not in out.loc["static_60_40", "reason"]
+
+    def test_baseline_exclusion_does_not_change_other_rows(self) -> None:
+        """`baseline_name` 은 그 이름의 행에만 영향을 준다 — 다른 후보는
+        여전히 60/40 대비 Calmar 관문을 통과해야 한다.
+        """
+        m = pd.DataFrame(
+            [
+                {"name": "static_60_40", "mdd": -0.15, "calmar": 0.5, "dsr": 0.99},
+                {"name": "b", "mdd": -0.15, "calmar": 0.4, "dsr": 0.99},
+            ]
+        ).set_index("name")
+        out = verdict(m, pbo=0.1, baseline_calmar=0.5, baseline_name="static_60_40")
+
+        assert not out.loc["b", "adopted"]
+        assert "60/40" in out.loc["b", "reason"]
+
+    def test_without_baseline_name_behavior_is_unchanged(self) -> None:
+        """`baseline_name` 을 안 넘기면(기본 `None`) 기존 동작 그대로 —
+        어떤 행 이름도 예외 없이 관문을 통과해야 한다."""
+        m = pd.DataFrame(
+            [{"name": "static_60_40", "mdd": -0.15, "calmar": 0.5, "dsr": 0.99}]
+        ).set_index("name")
+        out = verdict(m, pbo=0.1, baseline_calmar=0.5)
+
+        assert not out.loc["static_60_40", "adopted"]
+        assert "60/40" in out.loc["static_60_40", "reason"]
+
 
 class TestCommonWindow:
     """9개 구성이 서로 다른 시작일을 가질 때 — BAA 는 BIL 상장 + 12개월

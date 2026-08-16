@@ -45,7 +45,8 @@ def main() -> int:
     print(metrics.to_string(float_format=lambda v: f"{v:.4f}"))
     print(f"\nPBO = {pbo:.3f}  (관측 {len(matrix)}개월 × 구성 {matrix.shape[1]}개)")
     print("\n=== 판정 ===")
-    print(verdict(metrics, pbo, float(metrics.loc["static_60_40", "calmar"])).to_string())
+    baseline_calmar = float(metrics.loc["static_60_40", "calmar"])
+    print(verdict(metrics, pbo, baseline_calmar, baseline_name="static_60_40").to_string())
     return 0
 
 
