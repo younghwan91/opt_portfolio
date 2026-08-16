@@ -35,6 +35,19 @@ class BacktestOutput:
     defensive_ratio: float
 
 
+def _equity_from_returns(returns: pd.Series, entry_date: pd.Timestamp) -> pd.Series:
+    """`run_backtest` 와 같은 규약으로 `equity` 를 만든다.
+
+    진입 시점(`entry_date`)의 원금 10,000 을 맨 앞에 붙인다. 이걸 빼먹으면
+    `len(equity) == len(returns)` 가 되어 `BacktestOutput` 의 문서화된 불변식이
+    깨지고, `equity` 에서 계산하는 MDD 가 **첫 달 손실을 놓친다** — 이 저장소의
+    채택 관문(MDD ≤ 20%)을 실제보다 낮게 보이게 만들 수 있다.
+    """
+    growth = (1 + returns).cumprod() * 10_000.0
+    base = pd.Series([10_000.0], index=pd.DatetimeIndex([entry_date]))
+    return pd.concat([base, growth])
+
+
 def run_backtest(
     spec: StrategySpec,
     daily: pd.DataFrame,
@@ -103,12 +116,10 @@ def run_backtest(
         prev = weights
 
     returns = pd.Series(rets, index=pd.DatetimeIndex(dates), name=spec.name)
-    growth = (1 + returns).cumprod() * 10_000.0
     if entry_date is not None:
-        base = pd.Series([10_000.0], index=pd.DatetimeIndex([entry_date]))
-        equity = pd.concat([base, growth])
+        equity = _equity_from_returns(returns, entry_date)
     else:
-        equity = growth
+        equity = (1 + returns).cumprod() * 10_000.0
     return BacktestOutput(
         returns=returns,
         equity=equity,
@@ -150,9 +161,12 @@ def run_with_ma_overlay(
 
     aligned = invested.reindex(base.returns.index).astype("boolean").fillna(True).astype(bool)
     returns = base.returns.where(aligned, 0.0)
+    # entry_date 는 base.equity 의 맨 앞 원소다 (run_backtest 의 진입 시점) —
+    # 오버레이가 수익만 바꿀 뿐 진입 시점 자체를 옮기지는 않으므로 그대로 물려받는다.
+    equity = _equity_from_returns(returns, base.equity.index[0])
     return BacktestOutput(
         returns=returns,
-        equity=(1 + returns).cumprod() * 10_000.0,
+        equity=equity,
         selections=base.selections.where(aligned, "CASH"),
         defensive_ratio=base.defensive_ratio,
     )
@@ -211,9 +225,13 @@ def run_with_tranches(
     returns = sum(o.returns.reindex(common) for o in outs) / n_tranches
     assert isinstance(returns, pd.Series)
     returns.name = spec.name
+    # entry_date 는 오프셋 0 트랜치(원본 daily 그대로, plain 과 같은 진입 시점)의
+    # equity 맨 앞 원소를 물려받는다 — 트랜치 평균도 같은 시점에 같은 원금으로
+    # 시작했다고 보는 것이 자연스럽다.
+    equity = _equity_from_returns(returns, outs[0].equity.index[0])
     return BacktestOutput(
         returns=returns,
-        equity=(1 + returns).cumprod() * 10_000.0,
+        equity=equity,
         selections=outs[0].selections.reindex(common),
         defensive_ratio=float(np.mean([o.defensive_ratio for o in outs])),
     )
