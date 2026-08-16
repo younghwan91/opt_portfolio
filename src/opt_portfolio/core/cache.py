@@ -82,7 +82,7 @@ class DataCache:
 
         # Index for faster date-based queries
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_price_date 
+            CREATE INDEX IF NOT EXISTS idx_price_date
             ON price_data(date, ticker)
         """)
 
@@ -217,9 +217,9 @@ class DataCache:
             for ticker in df_long["ticker"].unique():
                 self.conn.execute(
                     """
-                    INSERT OR REPLACE INTO cache_metadata 
+                    INSERT OR REPLACE INTO cache_metadata
                     (ticker, earliest_date, latest_date, last_updated, record_count)
-                    SELECT 
+                    SELECT
                         ?,
                         MIN(date),
                         MAX(date),
@@ -358,7 +358,7 @@ class DataCache:
         """
         try:
             return self.conn.execute("""
-                SELECT 
+                SELECT
                     ticker,
                     earliest_date,
                     latest_date,
