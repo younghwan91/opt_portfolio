@@ -20,6 +20,19 @@ OUT=${OUT:-$HOME/data}
 # (`configs/README.md`). 공개 `configs/` 에는 합성 예제 둘만 남는다.
 CONFIGS=${CONFIGS:-$HOME/data/configs}
 
+# 시작 전에 벤치마크를 확인한다. 없으면 여기서 죽어야 한다.
+#
+# 두 번 당했다. 벌크 동기화가 `prices` 를 SEP 로 재구축하면 SFP 에 있는 SPY 가
+# 사라지는데, 그 사실을 **몇 시간짜리 큐가 시작하고 나서야** 알았다
+# (2026-08-15 band_8_150, 2026-08-16 cost_guards·band_8_150·roll5 3연속).
+# 실패는 시끄러웠지만 너무 늦게 시끄러웠다 — 검사를 앞으로 당긴다.
+if ! uv run --project "$REPO" python "$REPO/scripts/ensure_benchmark.py" \
+        --store "$STORE" --check-only; then
+    echo "!!! 벤치마크가 없어 배치를 시작하지 않는다."
+    echo "    uv run python scripts/ensure_benchmark.py --store $STORE"
+    exit 1
+fi
+
 run() {
     name=$1
     config=$2
