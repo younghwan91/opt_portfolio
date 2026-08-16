@@ -42,6 +42,11 @@ configs/*.json
 !configs/strategy.json
 !configs/space.json
 
+# 검증 리포트. 설정을 걷어내도 **리포트 본문이 같은 파라미터를 서술한다** —
+# 2026-08-13 판은 종목 수·리밸런싱 주기·시총 구간·팩터 구성을 그대로 적고
+# 있었다. 레시피는 JSON 에만 있는 게 아니다. 산출물은 `~/data/reports/`.
+reports/
+
 # API 키
 .env
 .env.*

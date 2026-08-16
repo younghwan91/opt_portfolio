@@ -26,6 +26,12 @@
 | 합성 예제 | `configs/strategy.json` · `configs/space.json` (공개, 이 둘뿐) |
 | 연구·실험 설정 | **저장소 밖** — 예: `~/data/configs/strategy_band15.json` |
 | 실제 운용 파라미터 | **저장소 밖** — 예: `~/data/configs/strategy_live.json` |
+| 검증 리포트 HTML | **저장소 밖** — `~/data/reports/` |
+
+**레시피가 사는 곳은 JSON 만이 아니다.** 설정 19개를 걷어낸 뒤에도
+`reports/2026-08-13-…html` 본문이 종목 수·리밸런싱 주기·시총 구간·팩터 구성을
+그대로 서술하고 있었다 (2026-08-16 발견). 파라미터를 감출 때는 **그 값을
+말하는 산문까지** 같이 본다.
 
 `--config` 는 임의 경로를 받으므로 코드 변경이 필요 없다.
 
