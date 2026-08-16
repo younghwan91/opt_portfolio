@@ -89,4 +89,15 @@ run band_down06 "$CONFIGS/strategy_band_down06.json"
 run band_down04 "$CONFIGS/strategy_band_down04.json"
 run band_cap_half "$CONFIGS/strategy_band_cap_half.json"
 run band_down06_guards "$CONFIGS/strategy_band_down06_guards.json"
+
+# v2 후보 — 방어를 켜고도 살아남는 밴드가 있는가 (§5.7).
+#
+# 채택 밴드는 방어를 켜면 후보가 목표 보유 수를 밑돌 만큼 줄어든다.
+# 위로 올릴수록 거래 가능한 종목은 늘지만 알파는 사라진다 — ×3 부터 DSR 이
+# 관문 아래다. **겹치는 구간은 ×1.6~×2 뿐**이고, 그 둘을 방어 켠 채로 잰다.
+#
+# 두 조건의 DSR 0.999 는 **방어를 끈 상태의 값**이다. 켜면 유니버스도 수익도
+# 달라지므로 추론하지 않고 실제로 돌린다.
+run v2_band16_guards "$CONFIGS/strategy_v2_band16_guards.json"
+run v2_band20_guards "$CONFIGS/strategy_v2_band20_guards.json"
 echo "전체 완료 $(date +%H:%M:%S)"

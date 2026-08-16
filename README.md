@@ -59,7 +59,7 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 | Calmar | **1.00** | 0.21 |
 | **Deflated Sharpe** (72 trials) | **1.000** ✓ | — |
 
-Cumulative 153.0× over the validation window. Verification reports are published in [`reports/`](reports/); holdings are not — the market caps of 20 names would reconstruct the band, and crowding a micro-cap universe moves the entry price.
+Cumulative 153.0× over the validation window. Verification reports are published in [`reports/`](reports/); holdings are not — the market caps of the holdings would reconstruct the band, and crowding a micro-cap universe moves the entry price.
 
 **Read the headline carefully.** Restricted to the window the previous protocol covered (2007-12 onward), this strategy returns 16.92% CAGR at Sharpe 0.758 — statistically identical to the 10-year-training result (16.90% / 0.756). The entire uplift comes from the newly included 2003–2007, a small-cap bull market that alone ran at 53% CAGR. Halving the training window left the overlapping period unchanged, which is evidence of robustness, not of a better strategy.
 
