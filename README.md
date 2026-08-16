@@ -127,7 +127,9 @@ Only factors with a documented rationale are included — Novy-Marx (2013), Sloa
 # Ingest data (Sharadar subscription required)
 export SHARADAR_API_KEY=...
 opt-factor ingest --store us.duckdb --provider sharadar \
-  --tables sf1,sep,daily,actions,sp500,tickers --tickers-file universe.txt
+  --tables sf1,sep,daily,actions,sp500,tickers
+# Loads the full Sharadar universe. To restrict it, pass --tickers-file with a
+# file of your own (bulk TICKERS CSV, or tickers separated by newlines/commas).
 
 # Screen factor predictive power — decile spread, IC, turnover
 uv run python scripts/factor_lab.py --store us.duckdb --factors GP_A,PER,SIZE
@@ -309,19 +311,19 @@ If you found this useful, please **[⭐ Star](https://github.com/younghwan91/opt
 - 🐛 Bugs & questions → [Issues](https://github.com/younghwan91/opt_portfolio/issues)
 - 📈 Updates → [Follow @younghwan91](https://github.com/younghwan91)
 
-## Related projects — Korean equity quant stack
+## Related projects — open-source quant stack
 
-Part of an open-source stack spanning market/fundamental/news collection APIs, data pipelines, backtesting and alpha research.
+Part of an open-source stack spanning Korean equities, US equities and crypto. Each repository stands on its own.
 
-| Project | Description |
-|---|---|
-| **[kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)** | Kiwoom Securities REST API Python client — 207 endpoints + real-time WebSocket |
-| **[krx-fundamentals-api](https://github.com/younghwan91/krx-fundamentals-api)** | Korean company fundamentals REST API — financials, ratios, dividends, screening (DART + KRX + Naver) |
-| **[krx-news-rest-api](https://github.com/younghwan91/krx-news-rest-api)** | Korean equity news & disclosure collection API (FastAPI + Redis) |
-| **[quant-airflow](https://github.com/younghwan91/quant-airflow)** | Airflow pipelines loading prices, flows and earnings into TimescaleDB |
-| **[kr-quant](https://github.com/younghwan91/kr-quant)** | KOSPI/KOSDAQ alpha research — guardrails enforcing walk-forward and random negative controls |
-| **[quantbox-engine](https://github.com/younghwan91/quantbox-engine)** | Crypto futures backtest & execution engine — zero look-ahead, backtest/live parity |
-| **[automated-stock-trading-systems](https://github.com/younghwan91/automated-stock-trading-systems)** | Backtester for Bensdorp's 7 non-correlated trading systems (educational reimplementation) |
+| Market | Project | What it is |
+|---|---|---|
+| 🇰🇷 Korean equities | **[kiwoom-rest-api](https://github.com/younghwan91/kiwoom-rest-api)** | Kiwoom Securities REST API client — full domestic-equity endpoint coverage, real-time WebSocket, sync + async (`pip install kiwoom-client`) |
+| 🇰🇷 Korean equities | **[krx-fundamentals-api](https://github.com/younghwan91/krx-fundamentals-api)** | Korean corporate fundamentals REST API — financial statements, valuation, dividends, screening (DART + KRX + Naver) |
+| 🇰🇷 Korean equities | **[krx-news-rest-api](https://github.com/younghwan91/krx-news-rest-api)** | Korean market news & disclosure collection API (FastAPI + Redis) |
+| 🇰🇷 Korean equities | **[quant-airflow](https://github.com/younghwan91/quant-airflow)** | Airflow pipeline collecting Korean market data into TimescaleDB — delisted names included, so downstream backtests aren't survivorship-biased |
+| 🇰🇷 Korean equities | **[kr-quant](https://github.com/younghwan91/kr-quant)** | KOSPI/KOSDAQ alpha research — walk-forward, random null controls, purged CV and Deflated Sharpe enforced as CI guardrails |
+| 🇺🇸 US equities | **[automated-stock-trading-systems](https://github.com/younghwan91/automated-stock-trading-systems)** | Backtester for Bensdorp's seven non-correlated trading systems (educational reimplementation) |
+| ₿ Crypto | **[quantbox-engine](https://github.com/younghwan91/quantbox-engine)** | Crypto futures backtest & execution engine — zero lookahead, backtest↔live parity |
 
 ## Author
 

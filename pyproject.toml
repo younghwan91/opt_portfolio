@@ -1,7 +1,7 @@
 [project]
 name = "opt-portfolio"
-version = "1.0.0"
-description = "Professional Portfolio Management System with VAA (Vigilant Asset Allocation) strategy, Ornstein-Uhlenbeck forecasting, and automated rebalancing"
+version = "3.1.0"
+description = "US equity factor engine — walk-forward gated by Deflated Sharpe on point-in-time, survivorship-bias-free data. Plus a VAA tactical asset allocation backtester."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -9,13 +9,16 @@ authors = [
     {name = "Portfolio Management Team"}
 ]
 keywords = [
-    "portfolio",
-    "quant",
-    "trading",
-    "vaa",
-    "momentum",
-    "asset-allocation",
+    "factor-investing",
+    "point-in-time",
+    "deflated-sharpe",
+    "walk-forward",
+    "survivorship-bias",
     "backtest",
+    "quant",
+    "portfolio",
+    "vaa",
+    "asset-allocation",
     "finance"
 ]
 classifiers = [
