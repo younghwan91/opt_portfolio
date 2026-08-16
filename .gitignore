@@ -35,6 +35,13 @@ tests/factor/fixtures/sharadar/
 *.private.json
 configs/private/
 
+# 화이트리스트. 이름 규칙(`*.private.json`)만으로 막으면 **새 이름을 쓰는 순간
+# 통과한다** — 실제로 그렇게 채택 전략 설정 19개가 공개 상태로 쌓였다.
+# 기본을 차단으로 두고 예제 2개만 예외로 연다.
+configs/*.json
+!configs/strategy.json
+!configs/space.json
+
 # API 키
 .env
 .env.*

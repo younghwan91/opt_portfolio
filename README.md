@@ -65,7 +65,36 @@ Cumulative 153.0× over the validation window. Holdings are not published — th
 
 <!-- PERFORMANCE:END -->
 
-Currently adopted strategy: US small caps, 8 factors + 200-day moving-average timing overlay, 20 stocks, quarterly rebalance, equal weight.
+Currently adopted strategy: US small caps, blended value and growth factors + 200-day moving-average timing overlay, quarterly rebalance, equal weight.
+
+### Why there is no strategy config here
+
+**The engine is public; the parameters are not.** Same split a deep-learning
+repository makes when it ships model code, the training script and the paper's
+numbers, but not the checkpoint.
+
+The "checkpoint" here is the set of parameters chosen **inside the walk-forward
+training window** — factor combination, market-cap band, number of holdings.
+The reason to withhold it is capacity, not performance. The universe is
+micro-cap; a few dozen extra buyers move the fill price. Hiding the holdings
+alone would be half a measure — **the market-cap band and the factor
+combination determine the holdings, so the recipe reproduces them.**
+
+What the public repository does and does not let you reproduce:
+
+| | |
+|---|---|
+| ✅ Methodology | walk-forward design, DSR/PBO gates, all 158 factor definitions, universe filters, cost model |
+| ✅ Validation record | the full trail including 20+ rejections ([experiment log](docs/factor-system/07-experiment-log.md), Korean) |
+| ❌ Parameters | adopted factor set · market-cap band · number of holdings |
+
+`configs/strategy.json` is a **synthetic example** that exercises the whole
+schema; it is not the adopted strategy. Deriving your own parameters from your
+own data is what this engine is for.
+
+> **Stated plainly.** The adopted parameters were public in commit history
+> before 2026-08-15. History and forks cannot be recalled, so that set stands
+> as a published v1.
 
 ### Before you believe that curve
 
@@ -77,7 +106,7 @@ What is **not** trustworthy at face value:
 
 | Assumption | Why it matters |
 |---|---|
-| **Slippage = 0** | Micro-cap ($5M–$80M) spreads run 1–5%. At 67% turnover per rebalance — 2.7 turns a year — **every 1% of round-trip slippage costs ~2.7%/yr.** Realistic spreads could take 5–8%/yr off this curve. That assumption is not data, and it has not been measured yet. |
+| **Slippage = 0** | Micro-cap spreads run 1–5%. At 67% turnover per rebalance — 2.7 turns a year — **every 1% of round-trip slippage costs ~2.7%/yr.** Realistic spreads could take 5–8%/yr off this curve. That assumption is not data, and it has not been measured yet. |
 | **Capacity** | Value weighting cuts Sharpe by 28%, i.e. the alpha sits in the smallest names. At size this result does not exist. |
 | **Period concentration** | 2003–2007 alone compounded at 53%/yr — the steep early section of the chart. |
 | **Factor screening** | 124 factors were screened to pick 8. That search is not charged to the 72 trials the Deflated Sharpe deflates for. |
@@ -134,35 +163,43 @@ uv run python scripts/factor_lab.py --store us.duckdb --factors GP_A,PER,SIZE
 
 # Official performance (walk-forward + Deflated Sharpe)
 opt-factor optimize --store us.duckdb \
-  --config configs/strategy_quantus_timed.json \
-  --space configs/space_small.json --objective calmar
+  --config configs/strategy.json \
+  --space configs/space.json --objective calmar
 
 # What to buy today (pass current holdings to get a trade plan)
 opt-factor holdings --store us.duckdb \
-  --config configs/strategy_quantus_timed.json --current my_holdings.csv
+  --config configs/strategy.json --current my_holdings.csv
 
 # Operating console
-opt-factor-tui --store us.duckdb --config configs/strategy_quantus_timed.json
+opt-factor-tui --store us.duckdb --config configs/strategy.json
 ```
 
-A strategy is fully declared by one JSON file.
+`--config` takes any path. Keep your own operating parameters outside the
+repository and pass them as `--config ~/data/configs/strategy_live.json`.
+
+A strategy is fully declared by one JSON file. Below is an excerpt from
+`configs/strategy.json` — a textbook factor set on a mid/large-cap band. It is
+an **example**, not the adopted strategy.
 
 ```jsonc
 {
-  "factors": ["PER", "PSR", "POR", "PGPR",
-              "NETINC_GROWTH_YOY", "OPINC_GROWTH_YOY",
-              "GP_GROWTH_YOY", "REVENUE_GROWTH_YOY"],
+  "factors": ["PBR", "PER", "PSR", "EV_EBITDA", "EV_GP",
+              "ROE", "ROIC", "GP_A",
+              "REVENUE_GROWTH_YOY", "OPINC_GROWTH_YOY",
+              "MOM_12_1", "MOM_6M"],
   "universe": {
-    "min_mcap_usd": 5000000, "max_mcap_usd": 80000000,
+    "min_mcap_usd": 1000000000, "max_mcap_usd": 50000000000,
+    "min_price_usd": 5.0,                      // penny-stock guard — default, leave on
+    "min_adv_usd": 1000000,                    // tradability guard — default, leave on
     "exclude_financials": true, "exclude_distressed": true
   },
   "backtest": {
-    "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
+    "n_stocks": 30, "rebalance": "ME", "weighting": "equal",
     "hold_multiple": 1.0,                      // no-trade band
     "max_sector_weight": 1.0,                  // sector cap (<1 to bind)
-    "cost": {"commission_bps": 50, "slippage_bps": 0}
+    "cost": {"commission_bps": 50, "slippage_bps": 10}
   },
-  "timing_ma_days": 200,                       // market-timing overlay (on/off)
+  "timing_ma_days": null,                      // market-timing overlay (on/off)
   "target_vol": null,                          // continuous volatility targeting
   "select_top_k": 0                            // >0 selects factors inside the training window
 }
@@ -259,7 +296,7 @@ src/opt_portfolio/
 
 ```bash
 make install        # uv sync --extra dev
-make test           # pytest + coverage (297 tests)
+make test           # pytest + coverage (292 tests)
 make lint           # ruff check + format --check
 make typecheck      # mypy src/
 ```

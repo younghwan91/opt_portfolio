@@ -9,12 +9,21 @@
   "factor_weights": null,
 
   "universe": {
+    "min_mcap_usd": 1000000000.0,
+    "max_mcap_usd": 50000000000.0,
+    "smallcap_bottom_pct": null,
+    "min_price_usd": 5.0,
+    "min_adv_usd": 1000000.0,
     "exclude_financials": true,
+    "exclude_holdings": false,
     "exclude_distressed": true,
+    "exclude_deficit_quarter": false,
+    "exclude_deficit_ttm": false,
     "exclude_china": true,
     "exclude_ptp": true,
-    "min_price_usd": 5.0,
-    "min_adv_usd": 1000000.0
+    "extra_ptp_tickers": [],
+    "wics_industries": [],
+    "sectors": []
   },
 
   "backtest": {
@@ -22,12 +31,29 @@
     "rebalance": "ME",
     "weighting": "equal",
     "max_weight": 0.10,
+    "max_sector_weight": 1.0,
+    "hold_multiple": 1.0,
     "cov_window": 252,
-    "cost": {}
+    "ir_scale": 0.03,
+    "view_confidence": 0.5,
+    "cost": {
+      "commission_bps": 50.0,
+      "slippage_bps": 10.0
+    }
   },
 
   "timing_ma_days": null,
+  "timing_reentry_days": 5,
+
+  "target_vol": null,
+  "vol_window": 63,
+  "vol_min_exposure": 0.0,
+  "vol_max_exposure": 1.0,
+
   "benchmark": "SPY",
   "signal_freq": "ME",
+  "regime_conditional": false,
+  "select_top_k": 0,
+  "select_method": "ic",
   "subscribed": ["SF1", "SEP"]
 }

@@ -50,6 +50,9 @@ dev = [
     "mypy>=1.20.0",
     "ruff>=0.15.10",
     "types-requests>=2.31.0",
+    # 비공개 전략 설정 차단 룰(.pre-commit-config.yaml)을 CI 가 돌리기 위해 필요하다.
+    # 각자 기계에 깔린 것에 의존하면, 안 깔린 기계에서 방어가 조용히 사라진다.
+    "pre-commit>=4.0.0",
 ]
 
 [project.urls]

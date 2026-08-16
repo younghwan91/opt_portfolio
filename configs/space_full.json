@@ -1,9 +1,0 @@
-{
-  "n_stocks": ["int", 15, 50],
-  "rebalance": ["cat", ["ME", "QE"]],
-  "weighting": ["cat", ["equal", "inverse_vol", "risk_parity", "hrp", "mvo", "black_litterman"]],
-  "max_weight": ["float", 0.04, 0.15],
-  "cov_window": ["int", 120, 504],
-  "ir_scale": ["float", 0.01, 0.08],
-  "view_confidence": ["float", 0.05, 2.0]
-}

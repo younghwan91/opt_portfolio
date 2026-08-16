@@ -23,10 +23,14 @@ repos:
       # .gitignore 는 `git add -f` 한 번이면 뚫린다. 초소형주 전략은 레시피가
       # 곧 종목이라, 한 번 푸시되면 히스토리·포크·캐시에 남아 되돌릴 수 없다.
       # 되돌릴 수 없는 실수는 경고가 아니라 차단으로 막는다.
+      # 화이트리스트로 검사한다. 이름 규칙만 막으면 새 이름을 쓰는 순간 통과하고,
+      # 실제로 그렇게 채택 전략 설정이 공개 상태로 쌓였다. configs/ 에 허용되는
+      # 것은 스키마를 보여주는 합성 예제 둘뿐이다.
       - id: no-private-strategy-configs
         name: 비공개 전략 설정이 커밋에 섞였는가
         entry: >-
-          비공개 전략 설정은 커밋할 수 없다.
-          운용 파라미터는 저장소 밖에 두고 `--config ~/data/strategy_live.json` 처럼 넘긴다.
+          비공개 전략 설정은 커밋할 수 없다. configs/ 에는 예제
+          strategy.json · space.json 만 둔다. 운용 파라미터는 저장소 밖에 두고
+          `--config ~/data/configs/strategy_live.json` 처럼 넘긴다.
         language: fail
-        files: '(\.private\.json$|^configs/private/)'
+        files: '(\.private\.json$|^configs/private/|^configs/(?!strategy\.json$|space\.json$).*\.json$)'
