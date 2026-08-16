@@ -261,7 +261,18 @@ momentum = 12·R(1M) + 4·R(3M) + 2·R(6M) + 1·R(12M)
 
 ![15-year VAA comparison](backtest_comparison.png)
 
-2011–2026, $10,000 initial. Standard VAA (`Current`) reaches ~$29k versus ~$24–27k for the OU-forecast variants — **adding a prediction layer did not help.**
+15 years, $10,000 initial. Dynamic VAA reaches **$22,813** (CAGR 5.7%, Sharpe 0.110). An
+earlier version of this section reported ~$29k with Sharpe inflated 20.9× by an
+annualization bug (monthly returns annualized with √252 instead of √12, fixed in
+`b9043d7`) — the actual numbers are lower on both counts.
+
+**Why CAGR sits at 5.7% instead of the ~17% cited in Keller's papers:** the strategy
+spent **54.7% of months in defensive assets**, and one of them, `SHY`, held **44
+months (24.4%)** at roughly 0.05% annualized yield — near zero — while `SPY`
+buy-and-hold returned far more over the same stretch. Keller's headline figures come
+from a 1970–2015 sample where defensive assets themselves returned 8–15%; this is not
+a bug in the implementation, it is a regime the strategy's assumptions no longer
+match. Full diagnosis: `docs/superpowers/specs/2026-08-17-taa-strategy-design.md` §0.
 
 ```bash
 make run                     # interactive menu
