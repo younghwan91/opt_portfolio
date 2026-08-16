@@ -27,7 +27,9 @@ def momentum_13612w(monthly: pd.DataFrame) -> pd.DataFrame:
     """13612W 모멘텀. 12개월 미만 구간은 NaN 이다."""
     score = None
     for months, weight in _MOMENTUM_TERMS:
-        term = weight * monthly.pct_change(months)
+        # fill_method=None — 기본값(pad)은 결측 가격을 직전 값으로 메워
+        # 0% 수익으로 둔갑시킨다. 결측은 NaN 으로 남아야 한다.
+        term = weight * monthly.pct_change(months, fill_method=None)
         score = term if score is None else score + term
     assert score is not None  # _MOMENTUM_TERMS 가 비지 않음
     return score
