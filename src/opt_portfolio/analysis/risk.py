@@ -68,7 +68,12 @@ class RiskAnalyzer:
             return np.log(prices / prices.shift(1)).dropna()
         return prices.pct_change().dropna()
 
-    def calculate_volatility(self, returns: pd.Series, annualize: bool = True) -> float:
+    def calculate_volatility(
+        self,
+        returns: pd.Series,
+        annualize: bool = True,
+        periods_per_year: int = MOMENTUM.TRADING_DAYS_PER_YEAR,
+    ) -> float:
         """
         Calculate volatility (standard deviation of returns).
 
@@ -86,11 +91,14 @@ class RiskAnalyzer:
         """
         vol = returns.std()
         if annualize:
-            vol *= np.sqrt(MOMENTUM.TRADING_DAYS_PER_YEAR)
+            vol *= np.sqrt(periods_per_year)
         return vol
 
     def calculate_sharpe_ratio(
-        self, returns: pd.Series, risk_free_rate: float | None = None
+        self,
+        returns: pd.Series,
+        risk_free_rate: float | None = None,
+        periods_per_year: int = MOMENTUM.TRADING_DAYS_PER_YEAR,
     ) -> float:
         """
         Calculate Sharpe Ratio.
@@ -110,9 +118,14 @@ class RiskAnalyzer:
         if risk_free_rate is None:
             risk_free_rate = self.risk_free_rate
 
-        # Annualize returns
-        annual_return = returns.mean() * MOMENTUM.TRADING_DAYS_PER_YEAR
-        annual_vol = self.calculate_volatility(returns, annualize=True)
+        # Annualize returns.
+        # `periods_per_year` 를 반드시 시계열 주기와 맞춰야 한다 — 월별 수익률에
+        # 252 를 쓰면 분자가 21배, 분모가 4.58배 부풀어 Sharpe 가 20.9배가 된다.
+        # VAA 백테스트가 실제로 그 상태였다 (보고 3.204 / 실제 0.153).
+        annual_return = returns.mean() * periods_per_year
+        annual_vol = self.calculate_volatility(
+            returns, annualize=True, periods_per_year=periods_per_year
+        )
 
         if annual_vol == 0:
             return 0.0

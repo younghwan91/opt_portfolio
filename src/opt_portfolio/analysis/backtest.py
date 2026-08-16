@@ -25,6 +25,9 @@ from .data_fetcher import DataFetcher
 from .metrics import calculate_cagr
 from .risk import RiskAnalyzer
 
+#: 이 모듈의 백테스트는 월 1회 리밸런싱이므로 수익률 시계열이 월별이다.
+PERIODS_PER_YEAR_MONTHLY = 12
+
 
 @dataclass
 class BacktestResult:
@@ -60,8 +63,14 @@ class BacktestResult:
 
         if not self.returns.empty:
             risk_analyzer = RiskAnalyzer()
-            self.volatility = risk_analyzer.calculate_volatility(self.returns)
-            self.sharpe_ratio = risk_analyzer.calculate_sharpe_ratio(self.returns)
+            # VAA 백테스트는 **월별** 리밸런싱이라 수익률도 월별이다.
+            # 기본값(252)을 그대로 쓰면 Sharpe 가 20.9배, 변동성이 4.58배 부푼다.
+            self.volatility = risk_analyzer.calculate_volatility(
+                self.returns, periods_per_year=PERIODS_PER_YEAR_MONTHLY
+            )
+            self.sharpe_ratio = risk_analyzer.calculate_sharpe_ratio(
+                self.returns, periods_per_year=PERIODS_PER_YEAR_MONTHLY
+            )
             self.max_drawdown, _, _ = risk_analyzer.calculate_max_drawdown(self.equity_curve)
             if self.max_drawdown > 0:
                 self.calmar_ratio = self.cagr / self.max_drawdown
