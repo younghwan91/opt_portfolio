@@ -1,0 +1,37 @@
+{
+  "factors": [
+    "GP_A",
+    "IT_TURNOVER",
+    "REVENUE_GROWTH_YOY",
+    "PFCR",
+    "SIZE"
+  ],
+  "factor_weights": null,
+  "universe": {
+    "exclude_financials": true,
+    "exclude_distressed": true,
+    "exclude_china": true,
+    "exclude_ptp": true,
+    "min_price_usd": 5.0,
+    "min_adv_usd": 1000000.0
+  },
+  "backtest": {
+    "n_stocks": 15,
+    "rebalance": "QE",
+    "weighting": "equal",
+    "max_weight": 0.15,
+    "cov_window": 252,
+    "cost": {
+      "commission_bps": 5.0,
+      "slippage_bps": 15.0
+    }
+  },
+  "timing_ma_days": 200,
+  "benchmark": "SPY",
+  "signal_freq": "ME",
+  "subscribed": [
+    "SF1",
+    "SEP"
+  ],
+  "timing_reentry_days": 5
+}

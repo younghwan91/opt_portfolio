@@ -108,7 +108,7 @@ hr{border:0; border-top:1px solid var(--rule); margin:44px 0}
 
 <header class="col">
   <p class="eyebrow">Walk-Forward 검증 · 3판</p>
-  <h1>기존 전략에 낙폭 통제를 얹은 조합이 최종 채택됐다</h1><p style="margin:1rem 0;padding:.75rem 1rem;border-left:3px solid #999;background:rgba(128,128,128,.08);font-size:.9em"><strong>편집 고지 (2026-08-16).</strong> 이 저장소는 공개다. 성과·방법론·검증 절차는 그대로 싣되 <strong>채택 파라미터의 값(시총 밴드·보유 종목 수)은 가렸다.</strong> 유니버스가 초소형주라 레시피가 알려지면 같은 종목에 수요가 몰려 체결가가 밀리기 때문이다. 판단 근거는 <code>configs/README.md</code> 에 있다.</p>
+  <h1>기존 전략에 낙폭 통제를 얹은 조합이 최종 채택됐다</h1><p style="margin:1rem 0;padding:.75rem 1rem;border-left:3px solid #999;background:rgba(128,128,128,.08);font-size:.9em"><strong>2026-08-16.</strong> 이 판은 발행 당시 그대로다. 이후 검증에서 <strong>여기 실린 성과가 방어 장치(슬리피지·최소 주가·최소 거래대금)를 끈 상태의 값</strong>임이 드러났다 — 켜면 무너진다. 경위는 <code>docs/factor-system/07-experiment-log.md</code> §5.5 에 있다.</p>
   <p class="deck">우리가 처음부터 설계한 팩터 조합보다, <strong>이미 쓰고 있던 소형주 전략에 200일 이평 타이밍을 얹은 쪽</strong>이 모든 지표에서 앞섰다.
   수익은 오르고 최대 낙폭은 −63.8%에서 −23.7%로 줄었다. 3판에서 새로 시험한 것은 20가지가 넘고, <strong>채택된 것은 이 하나뿐이다.</strong></p>
   <div class="meta">
@@ -122,7 +122,7 @@ hr{border:0; border-top:1px solid var(--rule); margin:44px 0}
   <div>
     <p class="verdict-label">채택</p>
     <p class="verdict-call">소형주 8팩터 + 200일 이평 타이밍</p>
-    <p>미국 소형주에서 가치 4팩터·성장 4팩터를 동일가중으로 합성해 정해진 수의 종목을 분기마다 담고,
+    <p>미국 소형주(시총 하위 20%)에서 가치 4팩터·성장 4팩터를 동일가중으로 합성해 20종목을 분기마다 담고,
     벤치마크가 200일 이평 아래면 현금으로 빠진다. OOS 18.6년 기준
     <strong>CAGR 16.90% · 최대낙폭 −23.7% · DSR 0.992</strong>.</p>
     <p>낙폭 한도를 30%로 두면 <strong>1.2배 레버리지</strong>까지 가능하고, 그때 CAGR 18.71% · 낙폭 −29.9%다.</p>
@@ -280,7 +280,7 @@ opt-factor-tui --store us_micro.duckdb \
   <div class="sec-head"><span class="sec-num">05</span><h2>남은 위험</h2></div>
   <div class="col">
     <ul>
-      <li><strong>초소형주 유니버스다.</strong> 초소형주 구간이라 호가 스프레드가 넓다.
+      <li><strong>초소형주 유니버스다.</strong> 시총 하위 20%는 $27M~$72M 구간이며, 호가 스프레드가 넓다.
       백테스트는 수수료 0.5%·슬리피지 0을 가정했다 — 실제로는 이보다 비쌀 수 있고, 그만큼 성과가 깎인다.</li>
       <li><strong>용량 제약이 있다.</strong> 가치가중으로 바꾸면 Sharpe가 28% 깎인다는 것은
       알파가 작은 종목에 있다는 뜻이다. 자금이 커지면 이 성과는 실현되지 않는다.</li>

@@ -59,7 +59,18 @@
 | Calmar | **1.00** | 0.21 |
 | **Deflated Sharpe** (시도 72회) | **1.000** ✓ | — |
 
-검증 구간 누적 153.0배. 검증 리포트는 [`reports/`](reports/) 에 공개한다. **보유 종목은 공개하지 않는다** — 보유 종목의 시가총액을 훑으면 밴드가 역산되고, 초소형주라 수요가 몰리면 자신의 체결가가 밀린다.
+검증 구간 누적 153.0배. 검증 리포트는 [`reports/`](reports/) 에 공개한다. 설정이 공개돼 있으므로 보유 종목은 `opt-factor holdings` 로 누구나 재현할 수 있다.
+
+> ## ⚠ 2026-08-16 — 위 숫자는 **방어 장치를 끈 상태**의 값이다
+>
+> 설계 문서가 필수라고 적은 셋(슬리피지 · 최소 주가 · 최소 거래대금)을 켜고
+> 다시 재자 **Sharpe 1.047 → −0.224, DSR 1.000 → 0.002** 로 무너졌다.
+> 유니버스의 98% 가 사라져 후보가 15~43종목만 남기 때문이다.
+> 실제 보유 종목의 일 거래대금 중앙값은 약 $45k 이고 **원금 상한은 1억 남짓**이다.
+>
+> **운용 후보는 대형주 E안**(`configs/strategy_lean_timed.json`)으로 바뀌었다 —
+> 방어를 켠 채로 CAGR 16.34% · Sharpe 0.727 · **DSR 0.996**, 용량 제약 없음.
+> 전 과정은 [`07-experiment-log.md`](docs/factor-system/07-experiment-log.md) §5.5·§5.8.
 
 **표제 숫자를 그대로 읽으면 안 된다.** 이전 프로토콜이 덮던 구간(2007-12 이후)만 잘라 보면 CAGR 16.92% · Sharpe 0.758 로, 학습 10년 결과(16.90% / 0.756)와 사실상 같다. 개선분 전부가 새로 들어온 2003~2007 에서 나왔고 그 구간만 떼면 CAGR 53% 다 — 소형주 대세 상승기다. 학습 표본을 절반으로 줄여도 겹치는 구간이 그대로였다는 것이 이 실행의 소득이며, 그것은 전략이 좋아졌다는 뜻이 아니라 **학습 길이에 둔감하다**는 뜻이다.
 
@@ -67,30 +78,12 @@
 
 채택 전략: 미국 소형주, 가치·성장 팩터 결합 + 200일 이평 타이밍, 분기 리밸런싱, 동일비중.
 
-### 왜 설정 파일이 없나
+### 전부 공개한다
 
-**엔진은 공개하고 파라미터는 공개하지 않는다.** 딥러닝 저장소가 모델 코드와
-학습 스크립트, 논문 수치는 내놓고 체크포인트는 안 푸는 것과 같은 구분이다.
-
-여기서 "체크포인트"에 해당하는 것은 walk-forward **학습 구간 안에서 고른
-파라미터** — 팩터 조합, 시총 밴드, 종목 수다. 이것을 감추는 이유는 성과가
-아니라 **용량**이다. 유니버스가 초소형주라 같은 종목을 사는 사람이 몇십 명만
-늘어도 체결가가 밀린다. 보유 종목만 감추는 것은 반쪽짜리다 — **시총 밴드와
-팩터 조합이 종목을 결정하기 때문에, 레시피가 있으면 같은 종목이 나온다.**
-
-공개된 것으로 재현할 수 있는 것과 없는 것:
-
-| | |
-|---|---|
-| ✅ 방법론 | walk-forward 설계, DSR·PBO 관문, 158팩터 정의, 유니버스 필터 구현, 비용 모델 |
-| ✅ 검증 절차 | 기각 20건 포함 전 과정 기록 ([실험 기록](docs/factor-system/07-experiment-log.md)) |
-| ❌ 파라미터 | 채택 팩터 조합 · 시총 밴드 · 종목 수 |
-
-`configs/strategy.json` 은 스키마 전체를 보여주는 **합성 예제**이며 채택 전략이
-아니다. 자신의 파라미터는 자신의 데이터로 도출하는 것이 애초에 이 엔진의 용도다.
-
-> **투명하게 밝힌다.** 채택 파라미터는 2026-08-15 이전 커밋 히스토리에 공개돼
-> 있었다. 히스토리·포크는 회수할 수 없으므로 그것은 공개된 v1 으로 남는다.
+엔진도, 158팩터 정의도, **채택 파라미터도** `configs/` 에 그대로 있다. 한때
+감췄다가 열었다 — 감춘 레시피(초소형주)는 방어 장치를 켜면 무너져 실제로 굴릴
+물건이 아니었고, 실제로 쓸 대형주 전략은 용량 제약이 없어 감출 이유가 없었다.
+경위는 [`configs/README.md`](configs/README.md).
 
 ### 이 곡선을 믿기 전에
 
@@ -172,35 +165,33 @@ opt-factor holdings --store us.duckdb \
 opt-factor-tui --store us.duckdb --config configs/strategy.json
 ```
 
-`--config` 는 임의 경로를 받는다. 자신의 운용 파라미터는 저장소 밖에 두고
-`--config ~/data/configs/strategy_live.json` 처럼 넘긴다.
-
-전략은 JSON 한 파일로 완전히 선언된다. 아래는 `configs/strategy.json` 에서
-발췌한 **예제**다 — 문헌 표준 팩터와 중대형주 밴드를 쓰며, 채택 전략이 아니다.
+전략은 JSON 한 파일로 완전히 선언된다. 아래가 **채택 전략**(`configs/strategy_quantus_timed.json`)이다.
 
 ```jsonc
 {
-  "factors": ["PBR", "PER", "PSR", "EV_EBITDA", "EV_GP",
-              "ROE", "ROIC", "GP_A",
-              "REVENUE_GROWTH_YOY", "OPINC_GROWTH_YOY",
-              "MOM_12_1", "MOM_6M"],
+  "factors": ["PER", "PSR", "POR", "PGPR",
+              "NETINC_GROWTH_YOY", "OPINC_GROWTH_YOY",
+              "GP_GROWTH_YOY", "REVENUE_GROWTH_YOY"],
   "universe": {
-    "min_mcap_usd": 1000000000, "max_mcap_usd": 50000000000,
-    "min_price_usd": 5.0,                      // 페니스톡 배제 — 기본값, 끄지 말 것
-    "min_adv_usd": 1000000,                    // 체결 가능성 — 기본값, 끄지 말 것
+    "min_mcap_usd": 5000000, "max_mcap_usd": 80000000,
+    "min_price_usd": 0.0,                      // ⚠ 설계 문서는 $5 를 필수라 적었다
+    "min_adv_usd": 0.0,                        // ⚠ 설계 문서는 $1M 을 필수라 적었다
     "exclude_financials": true, "exclude_distressed": true
   },
   "backtest": {
-    "n_stocks": 30, "rebalance": "ME", "weighting": "equal",
-    "hold_multiple": 1.0,                      // 매매 유예구간
-    "max_sector_weight": 1.0,                  // 섹터 비중 상한 (1 미만이면 물린다)
-    "cost": {"commission_bps": 50, "slippage_bps": 10}
+    "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
+    "max_weight": 0.06,
+    "cost": {"commission_bps": 50, "slippage_bps": 0}   // ⚠ 기본값은 10
   },
-  "timing_ma_days": null,                      // 마켓타이밍 오버레이 (켜짐/꺼짐)
-  "target_vol": null,                          // 연속 변동성 타게팅
-  "select_top_k": 0                            // >0 이면 학습 구간 내 팩터 선택
+  "timing_ma_days": 200,                       // 마켓타이밍 오버레이
+  "timing_reentry_days": 5
 }
 ```
+
+> ⚠ 표시한 셋은 **설계 문서가 필수라고 적은 방어 장치를 끈 것**이다. 켜면 이
+> 전략은 무너진다 (Sharpe 1.047 → −0.22). 그 검증이
+> [`07-experiment-log.md`](docs/factor-system/07-experiment-log.md) §5.5 다.
+> 이 설정을 그대로 쓰지 마시라 — 무엇이 왜 문제인지 보이려고 공개한다.
 
 ### 포트폴리오 구성 기법 — 무엇을 만들었고 무엇이 살아남았나
 

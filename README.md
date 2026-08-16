@@ -59,7 +59,20 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 | Calmar | **1.00** | 0.21 |
 | **Deflated Sharpe** (72 trials) | **1.000** ✓ | — |
 
-Cumulative 153.0× over the validation window. Verification reports are published in [`reports/`](reports/); holdings are not — the market caps of the holdings would reconstruct the band, and crowding a micro-cap universe moves the entry price.
+Cumulative 153.0× over the validation window. Verification reports are published in [`reports/`](reports/). Since the configs are public, the holdings are reproducible with `opt-factor holdings`.
+
+> ## ⚠ 2026-08-16 — the numbers above are measured **with the guards off**
+>
+> Switching on the three the design document calls mandatory (slippage, minimum
+> price, minimum dollar volume) collapses the strategy: **Sharpe 1.047 → −0.224,
+> DSR 1.000 → 0.002.** 98% of the universe disappears, leaving 15–43 candidates.
+> Median daily dollar volume of the actual holdings is about $45k, which caps
+> deployable capital at roughly $150k.
+>
+> **The operating candidate is now the large-cap variant**
+> (`configs/strategy_lean_timed.json`) — guards on, CAGR 16.34%, Sharpe 0.727,
+> **DSR 0.996**, no capacity limit. Full trail in
+> [`07-experiment-log.md`](docs/factor-system/07-experiment-log.md) §5.5, §5.8 (Korean).
 
 **Read the headline carefully.** Restricted to the window the previous protocol covered (2007-12 onward), this strategy returns 16.92% CAGR at Sharpe 0.758 — statistically identical to the 10-year-training result (16.90% / 0.756). The entire uplift comes from the newly included 2003–2007, a small-cap bull market that alone ran at 53% CAGR. Halving the training window left the overlapping period unchanged, which is evidence of robustness, not of a better strategy.
 
@@ -67,34 +80,14 @@ Cumulative 153.0× over the validation window. Verification reports are publishe
 
 Currently adopted strategy: US small caps, blended value and growth factors + 200-day moving-average timing overlay, quarterly rebalance, equal weight.
 
-### Why there is no strategy config here
+### Everything is published
 
-**The engine is public; the parameters are not.** Same split a deep-learning
-repository makes when it ships model code, the training script and the paper's
-numbers, but not the checkpoint.
-
-The "checkpoint" here is the set of parameters chosen **inside the walk-forward
-training window** — factor combination, market-cap band, number of holdings.
-The reason to withhold it is capacity, not performance. The universe is
-micro-cap; a few dozen extra buyers move the fill price. Hiding the holdings
-alone would be half a measure — **the market-cap band and the factor
-combination determine the holdings, so the recipe reproduces them.**
-
-What the public repository does and does not let you reproduce:
-
-| | |
-|---|---|
-| ✅ Methodology | walk-forward design, DSR/PBO gates, all 158 factor definitions, universe filters, cost model |
-| ✅ Validation record | the full trail including 20+ rejections ([experiment log](docs/factor-system/07-experiment-log.md), Korean) |
-| ❌ Parameters | adopted factor set · market-cap band · number of holdings |
-
-`configs/strategy.json` is a **synthetic example** that exercises the whole
-schema; it is not the adopted strategy. Deriving your own parameters from your
-own data is what this engine is for.
-
-> **Stated plainly.** The adopted parameters were public in commit history
-> before 2026-08-15. History and forks cannot be recalled, so that set stands
-> as a published v1.
+The engine, all 158 factor definitions, and **the adopted parameters** — they are
+all in `configs/`. They were withheld for a day and then opened: the withheld
+recipe (micro-cap) collapses once the tradability guards are switched on, so it
+was never something that could actually be run, and the large-cap strategy that
+can be run has no capacity limit and therefore nothing to protect. The reasoning
+is in [`configs/README.md`](configs/README.md) (Korean).
 
 ### Before you believe that curve
 
@@ -176,36 +169,35 @@ opt-factor holdings --store us.duckdb \
 opt-factor-tui --store us.duckdb --config configs/strategy.json
 ```
 
-`--config` takes any path. Keep your own operating parameters outside the
-repository and pass them as `--config ~/data/configs/strategy_live.json`.
-
-A strategy is fully declared by one JSON file. Below is an excerpt from
-`configs/strategy.json` — a textbook factor set on a mid/large-cap band. It is
-an **example**, not the adopted strategy.
+A strategy is fully declared by one JSON file. Below is the **adopted strategy**
+(`configs/strategy_quantus_timed.json`).
 
 ```jsonc
 {
-  "factors": ["PBR", "PER", "PSR", "EV_EBITDA", "EV_GP",
-              "ROE", "ROIC", "GP_A",
-              "REVENUE_GROWTH_YOY", "OPINC_GROWTH_YOY",
-              "MOM_12_1", "MOM_6M"],
+  "factors": ["PER", "PSR", "POR", "PGPR",
+              "NETINC_GROWTH_YOY", "OPINC_GROWTH_YOY",
+              "GP_GROWTH_YOY", "REVENUE_GROWTH_YOY"],
   "universe": {
-    "min_mcap_usd": 1000000000, "max_mcap_usd": 50000000000,
-    "min_price_usd": 5.0,                      // penny-stock guard — default, leave on
-    "min_adv_usd": 1000000,                    // tradability guard — default, leave on
+    "min_mcap_usd": 5000000, "max_mcap_usd": 80000000,
+    "min_price_usd": 0.0,                      // ⚠ the design doc calls $5 mandatory
+    "min_adv_usd": 0.0,                        // ⚠ the design doc calls $1M mandatory
     "exclude_financials": true, "exclude_distressed": true
   },
   "backtest": {
-    "n_stocks": 30, "rebalance": "ME", "weighting": "equal",
-    "hold_multiple": 1.0,                      // no-trade band
-    "max_sector_weight": 1.0,                  // sector cap (<1 to bind)
-    "cost": {"commission_bps": 50, "slippage_bps": 10}
+    "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
+    "max_weight": 0.06,
+    "cost": {"commission_bps": 50, "slippage_bps": 0}   // ⚠ the default is 10
   },
-  "timing_ma_days": null,                      // market-timing overlay (on/off)
-  "target_vol": null,                          // continuous volatility targeting
-  "select_top_k": 0                            // >0 selects factors inside the training window
+  "timing_ma_days": 200,                       // market-timing overlay
+  "timing_reentry_days": 5
 }
 ```
+
+> ⚠ The three marked lines **switch off guards the design document calls
+> mandatory.** Switch them on and this strategy collapses (Sharpe 1.047 → −0.22).
+> That verification is §5.5 of
+> [`07-experiment-log.md`](docs/factor-system/07-experiment-log.md) (Korean).
+> Do not run this config as-is — it is published to show what went wrong.
 
 ### Portfolio construction — what is built, and what survived
 
