@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from opt_portfolio.taa.registry import MA_OVERLAY, REGISTERED, TRANCHE
+from opt_portfolio.taa.registry import MA_OVERLAY, N_TRIALS, REGISTERED, TRANCHE
 
 EXPECTED = {
     "spy",
@@ -20,6 +20,17 @@ class TestRegistry:
         """DSR 의 n_trials 가 9 다. 늘리면 관문이 무의미해진다."""
         assert len(REGISTERED) == 9
         assert set(REGISTERED) == EXPECTED
+
+    def test_n_trials_stays_coupled_to_registry_count(self) -> None:
+        """N_TRIALS 는 len(REGISTERED) 에서 유도된다.
+
+        회귀 테스트: 새 구성이 추가되었으나 N_TRIALS 가 수동 갱신되지 않아
+        DSR 관문이 잘못된 시행 횟수로 동작하는 경우를 잡는다.
+        """
+        assert N_TRIALS == len(REGISTERED), (
+            f"N_TRIALS={N_TRIALS} but len(REGISTERED)={len(REGISTERED)}. "
+            "DSR gate expects the actual trial count."
+        )
 
     def test_vaa_uses_13612w_for_selection(self) -> None:
         assert REGISTERED["vaa_g4"].selection == "13612w"

@@ -107,5 +107,7 @@ MA_OVERLAY: frozenset[str] = frozenset({"baa_agg_ma", "baa_bal_ma", "baa_bal_ma_
 #: 리밸런싱 트랜치를 적용할 구성
 TRANCHE: frozenset[str] = frozenset({"baa_bal_tranche", "baa_bal_ma_tranche"})
 
-#: DSR 에 넘길 시도 횟수. `len(REGISTERED)` 와 반드시 같아야 한다.
-N_TRIALS: int = 9
+#: DSR 에 넘길 시도 횟수. 이 저장소의 주요 구조적 약점은 탐색 횟수 미정산
+#: (`07-experiment-log.md` §6). 이 목록을 늘리면 정산되지 않은 탐색이 되므로,
+#: 이 값은 `len(REGISTERED)` 로 유도되고 수동 수정으로부터 보호된다.
+N_TRIALS: int = len(REGISTERED)
