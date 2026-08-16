@@ -47,9 +47,18 @@ run() {
     echo "=== $name 종료 $(date +%H:%M:%S) ==="
 }
 
-run select "$CONFIGS/strategy_select.json"
-run quantus_voltarget "$CONFIGS/strategy_quantus_voltarget.json"
-run volonly "$CONFIGS/strategy_volonly.json"
-run quantus_sectorcap "$CONFIGS/strategy_quantus_sectorcap.json"
-run quantus_ens3 "$CONFIGS/strategy_quantus_timed.json" --ensemble 3
+# 2026-08-16 배치 — 07-experiment-log §5.5 의 현실적 비용 검증.
+#
+# 순서에 의도가 있다. 비용 3건을 먼저 돌린다: 슬리피지만 올리는 것과 유동성
+# 필터까지 켜는 것을 **따로** 재야 기여를 나눌 수 있고, 셋 중 `cost_guards` 가
+# 이 저장소에서 가장 중요한 실험이기 때문이다 — 무너지면 알파가 거래 불가능한
+# 종목에만 있었다는 뜻이다.
+#
+# 뒤의 둘은 어젯밤 미완으로 남은 것이다. band_8_150 은 SPY 가 아직 적재되기
+# 전(21:45)에 시작해 벤치마크 없음으로 죽었고, roll5 는 로그가 0바이트다.
+run cost_slip50 "$CONFIGS/strategy_cost_slip50.json"
+run cost_slip150 "$CONFIGS/strategy_cost_slip150.json"
+run cost_guards "$CONFIGS/strategy_cost_guards.json"
+run band_8_150 "$CONFIGS/strategy_band_8_150.json"
+run roll5 "$CONFIGS/strategy_quantus_timed.json" --train-window 5
 echo "전체 완료 $(date +%H:%M:%S)"
