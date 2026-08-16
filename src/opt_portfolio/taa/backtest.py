@@ -174,10 +174,14 @@ def _ma_overlay_from_base(
         .last()
         .astype("boolean")
         .shift(1)
+        # 이평 판정을 못 내리는 첫 구간(shift 로 생긴 결측)은 "투자 상태"로
+        # 기본 처리한다 — 판정 불가를 방어(현금)가 아니라 투자로 기본값
+        # 삼는 것이 보수적 방향이라는 뜻은 아니다, 그냥 명시적 선택이다.
         .fillna(True)
         .astype(bool)
     )
 
+    # 위와 같은 이유로, base 인덱스에 없는 재정렬 결측도 "투자 상태"로 채운다.
     aligned = invested.reindex(base.returns.index).astype("boolean").fillna(True).astype(bool)
     returns = base.returns.where(aligned, 0.0)
     # entry_date 는 base.equity 의 맨 앞 원소다 (run_backtest 의 진입 시점) —

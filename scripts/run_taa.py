@@ -23,9 +23,15 @@ _MIN_MONTHS = 200
 def main() -> int:
     tickers = sorted({t for spec in REGISTERED.values() for t in spec.tickers()})
     daily = load_prices(tickers)
-    print(
-        f"가격 패널: {daily.shape[1]}종목 {daily.index.min().date()} ~ {daily.index.max().date()}"
-    )
+    last_date = daily.index.max()
+    print(f"가격 패널: {daily.shape[1]}종목 {daily.index.min().date()} ~ {last_date.date()}")
+    # 마지막 관측일이 월말 근처가 아니면 to_monthly 가 그 반달치 데이터를
+    # "그 달 전체"로 라벨링한다 — 조용히 반달을 한 달로 세는 절단이다.
+    if last_date.date() != (last_date + pd.offsets.MonthEnd(0)).date():
+        print(
+            f"⚠ 마지막 데이터 {last_date.date()} 가 월말이 아니다 — "
+            "마지막 달은 반달치 데이터를 한 달로 라벨링한 것일 수 있다"
+        )
 
     metrics, matrix = evaluate_all(daily, start=START, end=END, cost_bps=COST_BPS)
 

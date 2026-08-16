@@ -36,8 +36,17 @@ _MONTHS_PER_YEAR = 12
 
 
 def summarize(name: str, returns: pd.Series) -> dict[str, float | str]:
-    """월별 수익률 → 지표. 연율화는 12 로 한다."""
-    equity = (1 + returns).cumprod()
+    """월별 수익률 → 지표. 연율화는 12 로 한다.
+
+    MDD 는 원금(진입 시점, 값 1.0)을 equity 곡선 맨 앞에 붙인 뒤 잰다. 안
+    붙이면 첫 달 손실이 자기 자신의 cummax 가 되어 그 낙폭이 통째로 빠진다
+    — `backtest.py` 의 `_equity_from_returns` 가 같은 이유로 원금을 붙이는
+    것과 같은 규약이다. `BacktestOutput.equity` 는 그 규약을 이미 지키지만
+    이 함수는 공통 구간으로 자른 `returns`(`evaluate_all` 의 `matrix`)만
+    받으므로 여기서 다시 붙여야 한다. 실측: `baa_bal_tranche` 는 이 누락으로
+    MDD 가 −9.72%로 보고됐으나 실제는 −11.33%다 (Calmar 0.835 → 0.716).
+    """
+    equity = pd.concat([pd.Series([1.0]), (1 + returns).cumprod()], ignore_index=True)
     years = len(returns) / _MONTHS_PER_YEAR
     cagr = float(equity.iloc[-1] ** (1 / years) - 1)
     mdd = float((equity / equity.cummax() - 1).min())
