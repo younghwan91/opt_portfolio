@@ -143,6 +143,12 @@ Only factors with a documented rationale are included — Novy-Marx (2013), Sloa
 
 ## Usage
 
+> **The data in this repository stops at 2026-08-14.** The subscription has been
+> ended, so there are no further updates. Outputs live in [`results/`](results/),
+> which means the reported performance **can be checked but not re-run** — re-running
+> needs the subscription below. The vendor's raw data is a paid product and cannot
+> be redistributed; that is a licensing constraint, not a disclosure policy.
+>
 > **Data requirement.** The factor engine needs a [Sharadar](https://sharadar.com) subscription (Bundle, from $29/mo) — it is the only retail-priced source that provides point-in-time fundamentals *and* delisted coverage together. Without it the engine runs but has nothing to run on. The vendor adapter is isolated behind a neutral `Provider` protocol, so swapping in another source means rewriting one file. The VAA subsystem uses free yfinance data and needs no subscription.
 
 ```bash
