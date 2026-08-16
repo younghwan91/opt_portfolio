@@ -115,3 +115,75 @@ def run_backtest(
         selections=pd.Series(picks, index=returns.index),
         defensive_ratio=float(np.mean(defensive_flags)) if defensive_flags else 0.0,
     )
+
+
+def run_with_ma_overlay(
+    spec: StrategySpec,
+    daily: pd.DataFrame,
+    benchmark: str = "SPY",
+    ma_days: int = 200,
+    **kwargs: object,
+) -> BacktestOutput:
+    """벤치마크가 이평 아래면 그 달 수익을 0 으로 (현금).
+
+    팩터 엔진에서 이 오버레이가 MDD 를 −63.8% → −23.7% 로 줄였다. 다만 BAA 의
+    카나리아가 이미 추세를 판정하므로 **여기서는 효과가 없거나 마이너스일 수
+    있다** — 이중 필터가 VAA 의 병(과도한 방어)을 재발시킬 수 있기 때문이다.
+    설계 문서 §7 에 그 예상을 적어두었다.
+    """
+    base = run_backtest(spec, daily, **kwargs)  # type: ignore[arg-type]
+    ma = daily[benchmark].rolling(ma_days, min_periods=ma_days).mean()
+    invested = (daily[benchmark] > ma).resample("ME").last().shift(1).fillna(True)
+
+    aligned = invested.reindex(base.returns.index).fillna(True).astype(bool)
+    returns = base.returns.where(aligned, 0.0)
+    return BacktestOutput(
+        returns=returns,
+        equity=(1 + returns).cumprod() * 10_000.0,
+        selections=base.selections.where(aligned, "CASH"),
+        defensive_ratio=base.defensive_ratio,
+    )
+
+
+def run_with_tranches(
+    spec: StrategySpec,
+    daily: pd.DataFrame,
+    n_tranches: int = 4,
+    **kwargs: object,
+) -> BacktestOutput:
+    """자본을 `n_tranches` 로 나눠 서로 다른 주에 리밸런싱한 평균.
+
+    단일 자산 + 월말 리밸런싱은 timing luck 에 취약하다 — 거래일 하루 차이로
+    결과가 갈린다. **분산을 줄이는 장치이지 수익을 좇는 파라미터가 아니다.**
+
+    `shift(-offset*5)` 를 원본 프레임에 바로 적용하면 뒤쪽 `offset*5`일이
+    통째로 사라진다 — 오프셋이 클 때는 이 손실이 월 하나를 통째로 삼켜, 트랜치의
+    유효 구간이 평이 기준보다 짧아진다(달의 경계를 넘는 절단이 조용히 발생).
+    그래서 끝단에 마지막 관측치를 이월한 여분의 영업일을 붙여 시프트한 뒤,
+    원래 날짜 범위로 다시 잘라 모든 트랜치가 같은 구간을 덮게 만든다.
+    """
+    pad = (n_tranches - 1) * 5
+    if pad > 0:
+        extra = pd.bdate_range(daily.index[-1], periods=pad + 1)[1:]
+        padded = daily.reindex(daily.index.union(extra)).ffill()
+    else:
+        padded = daily
+
+    outs = []
+    for offset in range(n_tranches):
+        shifted = padded.shift(-offset * 5).reindex(daily.index)
+        outs.append(run_backtest(spec, shifted, **kwargs))  # type: ignore[arg-type]
+
+    common = outs[0].returns.index
+    for o in outs[1:]:
+        common = common.intersection(o.returns.index)
+
+    returns = sum(o.returns.reindex(common) for o in outs) / n_tranches
+    assert isinstance(returns, pd.Series)
+    returns.name = spec.name
+    return BacktestOutput(
+        returns=returns,
+        equity=(1 + returns).cumprod() * 10_000.0,
+        selections=outs[0].selections.reindex(common),
+        defensive_ratio=float(np.mean([o.defensive_ratio for o in outs])),
+    )
