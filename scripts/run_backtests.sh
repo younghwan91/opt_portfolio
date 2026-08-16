@@ -16,6 +16,9 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 STORE=${STORE:-$HOME/data/us_micro.duckdb}
 UNIVERSE=${UNIVERSE:-$HOME/data/universe_quantus.txt}
 OUT=${OUT:-$HOME/data}
+# 전략 설정은 저장소 밖에 있다 — 초소형주 레시피는 체크포인트다
+# (`configs/README.md`). 공개 `configs/` 에는 합성 예제 둘만 남는다.
+CONFIGS=${CONFIGS:-$HOME/data/configs}
 
 run() {
     name=$1
@@ -28,7 +31,7 @@ run() {
     echo "=== $name 시작 $(date +%H:%M:%S) ==="
     uv run --project "$REPO" opt-factor optimize \
         --store "$STORE" --config "$config" \
-        --space "$REPO/configs/space_small.json" \
+        --space "$CONFIGS/space_small.json" \
         --tickers-file "$UNIVERSE" \
         --method grid --trials 3 --min-train-years 5 --objective calmar \
         --out "$OUT/oos_$name.json" "$@" > "$OUT/opt_$name.log" 2>&1
@@ -44,9 +47,9 @@ run() {
     echo "=== $name 종료 $(date +%H:%M:%S) ==="
 }
 
-run select "$REPO/configs/strategy_select.json"
-run quantus_voltarget "$REPO/configs/strategy_quantus_voltarget.json"
-run volonly "$HOME/data/strategy_volonly.json"
-run quantus_sectorcap "$REPO/configs/strategy_quantus_sectorcap.json"
-run quantus_ens3 "$REPO/configs/strategy_quantus_timed.json" --ensemble 3
+run select "$CONFIGS/strategy_select.json"
+run quantus_voltarget "$CONFIGS/strategy_quantus_voltarget.json"
+run volonly "$CONFIGS/strategy_volonly.json"
+run quantus_sectorcap "$CONFIGS/strategy_quantus_sectorcap.json"
+run quantus_ens3 "$CONFIGS/strategy_quantus_timed.json" --ensemble 3
 echo "전체 완료 $(date +%H:%M:%S)"

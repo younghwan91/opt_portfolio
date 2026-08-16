@@ -14,7 +14,7 @@
 | **채택 전략** | 미국 소형주 8팩터(가치4+성장4) + 200일 이평 타이밍 |
 | **성과 (OOS 18.6년, 보수 기준)** | CAGR 16.90% · MDD −23.7% · Sharpe 0.756 · **DSR 0.992** |
 | 측정 프로토콜 | walk-forward · 학습 5년 · 24폴드 (§5.4). 2003~2007 을 더하면 CAGR 23.78% 이나 **표제로 쓰지 않는다** |
-| 설정 파일 | `configs/strategy_quantus_timed.json` |
+| 설정 파일 | `~/data/configs/strategy_quantus_timed.json` — **저장소 밖**. 이유는 `configs/README.md` |
 | 유니버스 파일 | `~/data/universe_quantus.txt` (6,895종목) |
 | 스토어 | `~/data/us_micro.duckdb` |
 | 시험한 것 | 27가지 이상 · **채택 1** — 정교한 기법 중 채택 전략을 이긴 것은 없다 (일부는 명백히 나빴고, 일부는 차이를 잴 수 없었다) |
@@ -91,7 +91,7 @@
 전수 검토(2026-08-15)에서 나온 어긋남이다. 설계 문서 `00-overview.md` §6·§7 은
 세 항목을 **필수**로 못박았는데, 채택 설정은 셋 다 0 이었다.
 
-| 항목 | 설계 문서 | `strategy_quantus_timed.json` |
+| 항목 | 설계 문서 | 채택 설정 |
 |---|---|---|
 | 슬리피지 | 10bps — *"없으면 백테스트가 거짓말을 함"* | **0** |
 | 최소 거래대금 | $1M — *"없으면 체결 불가능한 종목으로 수익을 만듦"* | **0** |
@@ -460,19 +460,19 @@ opt-factor status --store ~/data/us_micro.duckdb
 
 # 공식 성과
 opt-factor optimize --store ~/data/us_micro.duckdb \
-  --config configs/strategy_quantus_timed.json \
-  --space configs/space_small.json \
+  --config ~/data/configs/strategy_quantus_timed.json \
+  --space ~/data/configs/space_small.json \
   --tickers-file ~/data/universe_quantus.txt \
   --method grid --trials 3 --min-train-years 5 --objective calmar
 
 # 오늘 살 목록
 opt-factor holdings --store ~/data/us_micro.duckdb \
-  --config configs/strategy_quantus_timed.json \
+  --config ~/data/configs/strategy_quantus_timed.json \
   --tickers-file ~/data/universe_quantus.txt
 
 # 운용 화면
 opt-factor-tui --store ~/data/us_micro.duckdb \
-  --config configs/strategy_quantus_timed.json \
+  --config ~/data/configs/strategy_quantus_timed.json \
   --tickers-file ~/data/universe_quantus.txt
 ```
 

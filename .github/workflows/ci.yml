@@ -11,6 +11,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 로컬 pre-commit 훅은 `git clone` 한 순간 사라진다 — 실제로 이 저장소가
+  # 그렇게 잃었고, 비공개 전략 설정 차단 룰이 몇 달간 꺼진 채로 있었다.
+  # 되돌릴 수 없는 실수를 막는 장치는 각자의 기계가 아니라 CI 에 둔다.
+  pre-commit:
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
+
+      - name: pre-commit (전체 파일)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

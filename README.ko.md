@@ -65,7 +65,32 @@
 
 <!-- PERFORMANCE:END -->
 
-채택 전략: 미국 소형주, 8팩터 + 200일 이평 타이밍, 20종목, 분기 리밸런싱, 동일비중.
+채택 전략: 미국 소형주, 가치·성장 팩터 결합 + 200일 이평 타이밍, 분기 리밸런싱, 동일비중.
+
+### 왜 설정 파일이 없나
+
+**엔진은 공개하고 파라미터는 공개하지 않는다.** 딥러닝 저장소가 모델 코드와
+학습 스크립트, 논문 수치는 내놓고 체크포인트는 안 푸는 것과 같은 구분이다.
+
+여기서 "체크포인트"에 해당하는 것은 walk-forward **학습 구간 안에서 고른
+파라미터** — 팩터 조합, 시총 밴드, 종목 수다. 이것을 감추는 이유는 성과가
+아니라 **용량**이다. 유니버스가 초소형주라 같은 종목을 사는 사람이 몇십 명만
+늘어도 체결가가 밀린다. 보유 종목만 감추는 것은 반쪽짜리다 — **시총 밴드와
+팩터 조합이 종목을 결정하기 때문에, 레시피가 있으면 같은 종목이 나온다.**
+
+공개된 것으로 재현할 수 있는 것과 없는 것:
+
+| | |
+|---|---|
+| ✅ 방법론 | walk-forward 설계, DSR·PBO 관문, 158팩터 정의, 유니버스 필터 구현, 비용 모델 |
+| ✅ 검증 절차 | 기각 20건 포함 전 과정 기록 ([실험 기록](docs/factor-system/07-experiment-log.md)) |
+| ❌ 파라미터 | 채택 팩터 조합 · 시총 밴드 · 종목 수 |
+
+`configs/strategy.json` 은 스키마 전체를 보여주는 **합성 예제**이며 채택 전략이
+아니다. 자신의 파라미터는 자신의 데이터로 도출하는 것이 애초에 이 엔진의 용도다.
+
+> **투명하게 밝힌다.** 채택 파라미터는 2026-08-15 이전 커밋 히스토리에 공개돼
+> 있었다. 히스토리·포크는 회수할 수 없으므로 그것은 공개된 v1 으로 남는다.
 
 ### 이 곡선을 믿기 전에
 
@@ -77,7 +102,7 @@
 
 | 가정 | 왜 문제인가 |
 |---|---|
-| **슬리피지 = 0** | 시총 $5M~$80M 종목의 호가 스프레드는 1~5% 다. 리밸런싱당 회전율 67%, 연 2.7회전이므로 **왕복 슬리피지 1%마다 연 2.7% 가 사라진다.** 현실적인 스프레드면 연 5~8% 가 깎일 수 있다. 이 가정은 데이터가 아니며 **아직 측정하지 않았다.** |
+| **슬리피지 = 0** | 초소형주 호가 스프레드는 1~5% 다. 리밸런싱당 회전율 67%, 연 2.7회전이므로 **왕복 슬리피지 1%마다 연 2.7% 가 사라진다.** 현실적인 스프레드면 연 5~8% 가 깎일 수 있다. 이 가정은 데이터가 아니며 **아직 측정하지 않았다.** |
 | **용량** | 가치가중으로 바꾸면 Sharpe 가 28% 깎인다 — 알파가 가장 작은 종목에 있다는 뜻이다. 자금이 커지면 이 결과는 존재하지 않는다. |
 | **구간 편중** | 2003~2007 만 연 53% 로 복리됐다 — 그래프 초반의 가파른 구간이다. |
 | **팩터 선별** | 124개를 훑어 8개를 골랐다. 그 탐색은 DSR 이 정산하는 시도 72회에 들어 있지 않다. |
@@ -136,35 +161,42 @@ uv run python scripts/factor_lab.py --store us.duckdb --factors GP_A,PER,SIZE
 
 # 공식 성과 (walk-forward + DSR)
 opt-factor optimize --store us.duckdb \
-  --config configs/strategy_quantus_timed.json \
-  --space configs/space_small.json --objective calmar
+  --config configs/strategy.json \
+  --space configs/space.json --objective calmar
 
 # 오늘 살 종목 (현재 보유를 주면 매매 계획까지)
 opt-factor holdings --store us.duckdb \
-  --config configs/strategy_quantus_timed.json --current 내보유.csv
+  --config configs/strategy.json --current 내보유.csv
 
 # 운용 화면
-opt-factor-tui --store us.duckdb --config configs/strategy_quantus_timed.json
+opt-factor-tui --store us.duckdb --config configs/strategy.json
 ```
 
-전략은 JSON 한 파일로 완전히 선언된다.
+`--config` 는 임의 경로를 받는다. 자신의 운용 파라미터는 저장소 밖에 두고
+`--config ~/data/configs/strategy_live.json` 처럼 넘긴다.
+
+전략은 JSON 한 파일로 완전히 선언된다. 아래는 `configs/strategy.json` 에서
+발췌한 **예제**다 — 문헌 표준 팩터와 중대형주 밴드를 쓰며, 채택 전략이 아니다.
 
 ```jsonc
 {
-  "factors": ["PER", "PSR", "POR", "PGPR",
-              "NETINC_GROWTH_YOY", "OPINC_GROWTH_YOY",
-              "GP_GROWTH_YOY", "REVENUE_GROWTH_YOY"],
+  "factors": ["PBR", "PER", "PSR", "EV_EBITDA", "EV_GP",
+              "ROE", "ROIC", "GP_A",
+              "REVENUE_GROWTH_YOY", "OPINC_GROWTH_YOY",
+              "MOM_12_1", "MOM_6M"],
   "universe": {
-    "min_mcap_usd": 5000000, "max_mcap_usd": 80000000,
+    "min_mcap_usd": 1000000000, "max_mcap_usd": 50000000000,
+    "min_price_usd": 5.0,                      // 페니스톡 배제 — 기본값, 끄지 말 것
+    "min_adv_usd": 1000000,                    // 체결 가능성 — 기본값, 끄지 말 것
     "exclude_financials": true, "exclude_distressed": true
   },
   "backtest": {
-    "n_stocks": 20, "rebalance": "QE", "weighting": "equal",
+    "n_stocks": 30, "rebalance": "ME", "weighting": "equal",
     "hold_multiple": 1.0,                      // 매매 유예구간
     "max_sector_weight": 1.0,                  // 섹터 비중 상한 (1 미만이면 물린다)
-    "cost": {"commission_bps": 50, "slippage_bps": 0}
+    "cost": {"commission_bps": 50, "slippage_bps": 10}
   },
-  "timing_ma_days": 200,                       // 마켓타이밍 오버레이 (켜짐/꺼짐)
+  "timing_ma_days": null,                      // 마켓타이밍 오버레이 (켜짐/꺼짐)
   "target_vol": null,                          // 연속 변동성 타게팅
   "select_top_k": 0                            // >0 이면 학습 구간 내 팩터 선택
 }
@@ -261,7 +293,7 @@ src/opt_portfolio/
 
 ```bash
 make install        # uv sync --extra dev
-make test           # pytest + 커버리지 (297 tests)
+make test           # pytest + 커버리지 (292 tests)
 make lint           # ruff check + format --check
 make typecheck      # mypy src/
 ```
