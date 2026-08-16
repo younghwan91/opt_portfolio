@@ -49,6 +49,10 @@ def load_prices(tickers: list[str], zip_path: Path | None = None) -> pd.DataFram
         if len(names) != 1:
             raise ValueError(f"zip 안의 csv 가 하나가 아니다: {names}")
         with zf.open(names[0]) as fh:
+            # csv.DictReader 로 전체를 수작업 스캔한다 — 펀드 벌크(ETF 수십
+            # 종목)에는 무해하지만, 훨씬 큰 주식 벌크로 이 로직을 복사하면
+            # 속도 문제가 생길 수 있다. 그때는 pandas.read_csv 청크 읽기로
+            # 바꾸는 걸 고려하라.
             reader = csv.DictReader(io.TextIOWrapper(fh, encoding="utf-8"))
             for row in reader:
                 t = row["ticker"]

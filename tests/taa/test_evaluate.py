@@ -19,6 +19,21 @@ class TestSummarize:
         assert {"cagr", "mdd", "calmar", "sharpe", "vol"} <= set(row)
         assert row["calmar"] == row["cagr"] / abs(row["mdd"])
 
+    def test_mdd_captures_the_drawdown_from_principal(self) -> None:
+        """첫 달에 큰 손실을 낸 뒤 계속 오르기만 하는 시계열.
+
+        equity 를 `(1 + returns).cumprod()` 로만 만들면 첫 원소가 곧 자기
+        자신의 cummax 가 되어 첫 달 손실이 낙폭 계산에서 통째로 빠진다 —
+        이후 값이 전부 그 위로만 움직이므로 mdd 가 0 으로 보고된다. 원금
+        (1.0)을 맨 앞에 붙여야 첫 달 손실이 낙폭으로 잡힌다.
+        """
+        idx = pd.date_range("2007-06-30", periods=4, freq="ME")
+        returns = pd.Series([-0.30, 0.05, 0.05, 0.05], index=idx)
+
+        row = summarize("x", returns)
+
+        assert abs(row["mdd"] - (-0.30)) < 1e-9
+
     def test_annualizes_monthly_with_twelve(self) -> None:
         """월별인데 252 로 연율화하면 이 저장소가 세 번째로 같은 실수를 한다."""
         r = _returns(0.008, 0.03)
