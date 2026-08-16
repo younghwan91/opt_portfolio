@@ -27,13 +27,24 @@ repos:
       # 실제로 그렇게 채택 전략 설정이 공개 상태로 쌓였다. configs/ 에 허용되는
       # 것은 스키마를 보여주는 합성 예제 둘뿐이다.
       #
-      # `reports/` 도 같이 막는다 — 설정을 걷어내도 **리포트 본문이 같은
-      # 파라미터를 서술한다.** 레시피가 사는 곳은 JSON 만이 아니다.
       - id: no-private-strategy-configs
-        name: 비공개 전략 설정·리포트가 커밋에 섞였는가
+        name: 비공개 전략 설정이 커밋에 섞였는가
         entry: >-
-          비공개 전략 파라미터는 커밋할 수 없다. configs/ 에는 예제
-          strategy.json · space.json 만 두고, 검증 리포트는 ~/data/reports/ 에 둔다.
-          운용 파라미터는 `--config ~/data/configs/strategy_live.json` 처럼 넘긴다.
+          비공개 전략 설정은 커밋할 수 없다. configs/ 에는 예제
+          strategy.json · space.json 만 둔다. 운용 파라미터는 저장소 밖에 두고
+          `--config ~/data/configs/strategy_live.json` 처럼 넘긴다.
         language: fail
-        files: '(\.private\.json$|^configs/private/|^configs/(?!strategy\.json$|space\.json$).*\.json$|^reports/)'
+        files: '(\.private\.json$|^configs/private/|^configs/(?!strategy\.json$|space\.json$).*\.json$)'
+
+      # 경로 검사만으로는 부족하다. 파일을 지워도 **그 값을 문장으로 말하는
+      # 산문**이 남는다 — 2026-08-13 리포트가 시총 구간을 그대로 적고 있었고,
+      # 실험 기록 §6 도 마찬가지였다. 둘 다 확장자 기준 점검이 놓쳤다.
+      #
+      # 값이 아니라 **모양**으로 검사한다. 패턴에 실제 숫자를 적으면 이 파일
+      # 자체가 유출이 되기 때문이다.
+      - id: no-strategy-parameter-values
+        name: 채택 파라미터 값이 산문에 적혔는가
+        entry: python3 scripts/check_no_parameter_values.py
+        language: system
+        pass_filenames: true
+        types_or: [markdown, html, text]
