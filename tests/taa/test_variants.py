@@ -77,10 +77,16 @@ def _dual_asset_noisy(seed: int = 27, noise: float = 5.0) -> pd.DataFrame:
     뒤집힌다. `SIGNAL_SPEC` 이 매달 둘 중 하나를 골라 전액 투자하므로,
     순위가 뒤집히는 달에는 신호 관측일(트랜치 오프셋)에 따라 실제로 다른
     자산이 뽑힌다 — 그래야 트랜치의 타이밍-분산 축소 효과를 측정할 신호가
-    생긴다. seed=27, noise=5.0 은 사전 탐색으로 고른 값으로, 이 파라미터에서
-    (1) 트랜치 평균 std 가 plain 대비 뚜렷이(약 14%) 줄고 (2) 슬리브 간
-    최소 쌍별 상관계수가 0.7 을 넘는다 — 두 조건을 동시에 만족하는 재현
-    가능한 케이스가 필요해서 무작위로 고르지 않고 그리드 서치로 찾았다.
+    생긴다.
+
+    `noise=5.0` 은 순위 뒤집힘이 실제로 일어날 만큼 잡음을 주기 위한
+    스케일이고, `seed=27` 기본값은 `TestTrancheSleeveCorrelation` 이 상관계수
+    행렬 하나를 고정해 보여주는 데 쓴다(그 테스트는 부등호 방향만 보는 게
+    아니라 실제 행렬 수치를 리포트해야 하므로 시드 하나가 필요하다). **분산
+    축소 자체는 시드 하나로 주장하지 않는다** — 처음엔 이 시드를 그리드
+    서치로 골라 "std 0.86배·상관계수 0.7" 이 나오게 맞췄었는데, 그건 데이터를
+    주장에 맞춘 것이지 주장을 데이터로 검증한 게 아니었다. `TestTranches`
+    쪽은 이제 여러 시드(0~9)를 독립적으로 돌려 방향성을 본다.
     """
     n = 40 * 21
     idx = pd.date_range("2010-01-01", periods=n, freq="B")
@@ -120,21 +126,32 @@ class TestTranches:
     자산이 뽑히는 상황을 만든다.
     """
 
-    def test_tranche_returns_have_lower_dispersion(self) -> None:
+    def test_tranche_returns_have_lower_dispersion_across_many_seeds(self) -> None:
         """트랜치는 수익을 좇는 게 아니라 분산을 줄이는 장치다 — 다만 실제
         구현(모든 슬리브가 같은 달력월의 진짜 가격을 공유)에서는 그 축소폭이
-        작다. 예전 버전은 슬리브마다 아예 다른 시간 구간의 수익을 평균 내는
-        착시로 큰 축소를 보였다(사전 실측 0.84배) — 옳게 고치면 그 착시가
-        사라진다. `_dual_asset_noisy` 는 사전 그리드서치로 고른 파라미터라
-        여전히 뚜렷한(≈0.86배) 축소를 보이지만, 상한을 1.0 에 바짝 붙이면
-        "슬리브 0(=plain)만 반환"하는 고장도 통과하므로 실질적 개선을
-        요구하는 0.9배로 조인다.
-        """
-        daily = _dual_asset_noisy()
-        plain = run_backtest(SIGNAL_SPEC, daily, cost_bps=0.0)
-        spread = run_with_tranches(SIGNAL_SPEC, daily, cost_bps=0.0)
+        작다.
 
-        assert spread.returns.std() < plain.returns.std() * 0.9
+        시드 하나로 이 방향성을 주장하면 순환논증이 된다: 그 시드 자체를
+        "축소가 뚜렷하게 나오는" 값으로 그리드서치해서 고른 것이면, 테스트는
+        "그 시드가 그 시드답게 군다"는 것 이상을 확인하지 못한다(리뷰
+        지적). 그래서 서로 독립인 시드 10개(0~9, `noise=5.0` 고정 — 시드별로
+        노이즈 스케일까지 바꾸진 않는다)에 대해 각각 `spread/plain` std 비율을
+        구하고, **대다수**(8/10 이상)가 1.0 미만인지와 **평균** 비율이
+        1.0 미만인지를 본다. 실측(2026-08-17): 9/10 이 비율 < 1.0, 평균 비율
+        ≈0.962 — 뚜렷하진 않아도 방향은 일관되게 축소 쪽이다. 이 실측이
+        바뀌어 방향성 자체가 깨지면(예: 대다수가 축소를 안 보이면) 이 테스트가
+        그대로 실패해야 한다 — 통과시키려고 문턱값을 다시 맞추지 않는다.
+        """
+        ratios = []
+        for seed in range(10):
+            daily = _dual_asset_noisy(seed=seed)
+            plain = run_backtest(SIGNAL_SPEC, daily, cost_bps=0.0)
+            spread = run_with_tranches(SIGNAL_SPEC, daily, cost_bps=0.0)
+            ratios.append(float(spread.returns.std() / plain.returns.std()))
+
+        reduced = sum(r < 1.0 for r in ratios)
+        assert reduced >= 8, f"10개 시드 중 {reduced}개만 축소를 보였다: {ratios}"
+        assert np.mean(ratios) < 1.0, f"평균 비율이 1.0 이상이다: {ratios}"
 
     def test_tranche_returns_differ_from_any_single_tranche(self) -> None:
         """평균이 트랜치 하나(예: 오프셋 0)로 몰래 대체돼도 std 상한만으론
