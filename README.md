@@ -12,7 +12,7 @@ Two independent subsystems live in this repository.
 
 | | **Factor engine** (`factor/`) | **VAA allocation** (`strategies/`·`analysis/`) |
 |---|---|---|
-| Scope | US single stocks (21,963 tickers, 1997–2026) | 7–11 ETFs |
+| Scope | US single stocks (20,931 tickers, 1997–2026) | 7–11 ETFs |
 | Question | Which stocks to buy | Which asset class to rotate into |
 | Data | Sharadar direct (point-in-time, delisted included) | yfinance daily closes |
 | Entry point | `opt-factor` · `opt-factor-tui` | `make run` · `run.py` |
