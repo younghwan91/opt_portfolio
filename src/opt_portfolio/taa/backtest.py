@@ -20,6 +20,15 @@ from .strategy import StrategySpec, is_defensive, select_weights
 
 @dataclass(frozen=True)
 class BacktestOutput:
+    """백테스트 결과.
+
+    `equity` 는 `returns` 보다 원소가 **하나 많다** — 맨 앞에 진입 시점의
+    원금(10,000)이 붙는다. 그래야 `equity[-1] == equity[0] * (1+returns).prod()`
+    가 항등식으로 성립한다 (첫 달 수익을 그 시점 자산가치에 두 번 복리로
+    반영하지 않기 위함이다). **`len(equity)` 로 기간 수를 세거나 두 시리즈를
+    위치로 zip 하면 하나씩 밀린다** — 기간 수는 항상 `len(returns)` 를 쓴다.
+    """
+
     returns: pd.Series
     equity: pd.Series
     selections: pd.Series
@@ -44,7 +53,9 @@ def run_backtest(
     monthly = to_monthly(daily)
     mom = momentum_13612w(monthly)
     sel = sma_ratio(monthly, window=13)
-    fwd = monthly.pct_change().shift(-1)
+    # fill_method=None — 기본값(pad)은 결측 월말가를 직전 값으로 메워 0% 수익으로
+    # 둔갑시킨다. 결측은 NaN 으로 남겨야 아래에서 절단을 잡아낼 수 있다.
+    fwd = monthly.pct_change(fill_method=None).shift(-1)
 
     needed = spec.tickers()
     usable = mom.dropna(how="any", subset=needed).index
@@ -68,9 +79,16 @@ def run_backtest(
 
         nxt = fwd.loc[date]
         weights = select_weights(spec, mom, sel, date)
+        missing = [t for t in weights if not np.isfinite(nxt[t])]
+        if missing:
+            # 마지막 달(다음 달이 없는 시점)은 위에서 이미 걸러졌다 — 여기 걸리는
+            # NaN 은 구간 중간의 가격 공백이다. 조용히 건너뛰면 이 저장소가 반복해
+            # 겪은 "성공 로그를 남긴 절단"이 된다. 예외를 던진다.
+            raise ValueError(
+                f"[{spec.name}] {realization_date.date()} 수익률 결측: {missing} — "
+                "가격 데이터 공백을 의심하라 (조용한 절단 금지)"
+            )
         gross = float(sum(w * nxt[t] for t, w in weights.items()))
-        if not np.isfinite(gross):
-            continue  # 다음 달 가격이 없는 마지막 시점
 
         all_tickers = set(weights) | set(prev)
         turnover = sum(abs(weights.get(t, 0.0) - prev.get(t, 0.0)) for t in all_tickers)

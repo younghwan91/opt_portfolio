@@ -48,6 +48,20 @@ class TestMomentum13612W:
 
         assert momentum_13612w(m)["A"].iloc[-1] < 0
 
+    def test_missing_month_propagates_nan_not_zero_return(self) -> None:
+        """`pct_change` 기본값(fill_method='pad')은 결측월을 직전 값으로 메워
+        0% 수익으로 둔갑시킨다 — 결측은 NaN 으로 남아야 모멘텀 점수가 그
+        결측을 '무변동'으로 오인하지 않는다."""
+        m = _monthly(13)
+        m.iloc[6, 0] = np.nan  # 구간 중간 한 달 결측 — 마지막 시점의 6개월 항 분모다
+
+        mom = momentum_13612w(m)
+
+        # 마지막 시점의 6개월 항(price[12]/price[6]-1)이 결측을 분모로 참조한다.
+        # 결측이 조용히 직전 값으로 메워지면(fill_method='pad') 이 항이 유한값이
+        # 되어 score 전체도 NaN 이 아니라 유한값으로 새어나간다.
+        assert not np.isfinite(mom["A"].iloc[-1])
+
 
 class TestSmaRatio:
     def test_is_price_over_trailing_average(self) -> None:
