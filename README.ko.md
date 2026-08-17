@@ -41,6 +41,14 @@
 
 ## 성과
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/performance-dark.png">
+  <img alt="대형주 5팩터 + 200일 타이밍의 walk-forward 검증 구간 누적 성장 — 2002-12부터 2026-08까지 15bps 36배, 50bps 27배, SPY 14배. 세로축 로그" src="docs/images/performance-light.png">
+</picture>
+
+*세로축은 로그다 — 기울기가 같으면 수익률이 같다. 2008·2012·2022 의 평평한
+구간은 200일 이평이 현금으로 뺀 자리다. 그 세 번이 SPY 와 낙폭이 갈리는 지점이다.*
+
 <!-- PERFORMANCE:START -->
 
 *운용 후보 · walk-forward 검증 구간 · 2002-12 – 2026-08 (23.6년)*
@@ -71,6 +79,14 @@
 
 ### 표제가 바뀐 경위 — 초소형주 전략은 폐기했다
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/guards-dark.png">
+  <img alt="초소형주 전략의 누적 성장 — 방어 장치를 끄면 153배, 켜면 0.040배로 원금의 96%를 잃는다. 세로축 로그" src="docs/images/guards-light.png">
+</picture>
+
+*같은 전략, 같은 구간. 다른 것은 슬리피지·최소 주가·최소 거래대금 셋뿐이다.
+파란 선이 2026-08-16 까지 이 README 의 표제였다.*
+
 2026-08-16 까지 이 자리에는 **초소형주 8팩터 전략**이 CAGR 23.78% · Sharpe 1.047
 로 걸려 있었다. 설계 문서가 필수라고 적은 방어 장치 셋(슬리피지 · 최소 주가 $5 ·
 최소 거래대금 $1M)을 켜고 다시 재자 **Sharpe 1.047 → −0.224 · MDD −23.7% → −99.2%**
@@ -90,6 +106,23 @@ DSR 0.995 로 관문을 넘는다. 무너뜨린 것은 유동성 필터다.
 
 전 과정은 [`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md)
 §5.5·§5.8 에 있다.
+
+### 만든 것 전부를 한 장에
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/risk-return-dark.png">
+  <img alt="위험 대비 수익 산점도 — 가로축 최대낙폭, 세로축 연평균 수익률. E안 대형주가 낙폭 24%에 수익 16%로 왼쪽 위, SPY는 낙폭 42%에 12%, 방어를 켠 초소형주는 낙폭 96%에 수익 −16%" src="docs/images/risk-return-light.png">
+</picture>
+
+*왼쪽 위가 좋다. 파란 점이 채택한 것, 빨간 점이 폐기한 것이다. 아래쪽의
+VAA-G4 · BAA · 60/40 은 이 저장소가 만들어 놓고 **채택하지 않은** 전술적
+자산배분 구성들이다 — PBO 0.770 으로 관문에서 탈락했다
+([`docs/taa/01-results.md`](docs/taa/01-results.md)).*
+
+**구간이 서로 다르다** — 팩터 계열은 2002-12~2026-08, TAA 계열은
+2008-07~2026-08(218개월)에서 쟀다. 그래서 여기 SPY(−41.8%)는 위 성과표의
+SPY(−55.2%)와 다른 숫자다 — 2008년 하락의 앞부분이 TAA 창 밖에 있다.
+같은 눈금 위에 있다고 같은 시험을 친 것은 아니다.
 
 ### 전부 공개한다
 

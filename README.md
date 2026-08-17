@@ -41,6 +41,15 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 
 ## Performance
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/performance-dark.png">
+  <img alt="Cumulative growth over the walk-forward validation window, 2002-12 to 2026-08: large-cap 5-factor with 200-day timing reaches 36x at 15bps slippage and 27x at 50bps, against 14x for SPY buy-and-hold. Log vertical axis." src="docs/images/performance-light.png">
+</picture>
+
+*Log scale — equal slopes mean equal returns. The flat stretches in 2008, 2012 and
+2022 are the 200-day overlay holding cash; those three are where the drawdown
+parts company with SPY. (Chart labels are Korean; the alt text carries the reading.)*
+
 <!-- PERFORMANCE:START -->
 
 *Operating candidate · walk-forward validation window · 2002-12 – 2026-08 (23.6y)*
@@ -74,6 +83,14 @@ on their common window (2009-12 onward, 201 months), it still clears at
 
 ### Why the headline changed — the micro-cap strategy was retired
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/guards-dark.png">
+  <img alt="Cumulative growth of the micro-cap strategy: 153x with the guards off, 0.040x with them on — a 96% loss of principal. Log vertical axis." src="docs/images/guards-light.png">
+</picture>
+
+*Same strategy, same window. The only difference is slippage, minimum price and
+minimum dollar volume. The blue line was this README's headline until 2026-08-16.*
+
 Until 2026-08-16 this space held a **micro-cap, 8-factor strategy** at CAGR 23.78%
 and Sharpe 1.047. Switching on the three guards the design document calls mandatory
 (slippage, $5 minimum price, $1M minimum dollar volume) collapsed it:
@@ -96,6 +113,24 @@ same conditions. Under the same conditions it is DSR 0.996 against 0.002.
 The full trail is in
 [`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md)
 §5.5 and §5.8 (Korean).
+
+### Everything that was built, on one chart
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/risk-return-dark.png">
+  <img alt="Risk-return scatter: max drawdown on the horizontal axis, CAGR on the vertical. The adopted large-cap strategy sits at 24% drawdown and 16% return, SPY at 42% and 12%, and the micro-cap strategy with guards on at 96% drawdown and −16% return." src="docs/images/risk-return-light.png">
+</picture>
+
+*Up and to the left is better. Blue is what was adopted, red is what was retired.
+The cluster at the bottom — VAA-G4, BAA, 60/40 — are tactical allocation
+configurations this repo built and **did not adopt**: they failed the gate at
+PBO 0.770 ([`docs/taa/01-results.md`](docs/taa/01-results.md), Korean).*
+
+**The windows differ.** The factor strategies are measured over 2002-12 – 2026-08,
+the tactical allocation ones over 2008-07 – 2026-08 (218 months). That is why SPY
+here (−41.8%) is a different number from SPY in the table above (−55.2%): the first
+leg of the 2008 crash falls outside the shorter window. Sharing an axis is not the
+same as sitting the same exam.
 
 ### Everything is published
 
