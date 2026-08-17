@@ -69,56 +69,80 @@ parts company with SPY. (Chart labels are Korean; the alt text carries the readi
 | Sharpe | **0.727** | 0.648 | 0.418 |
 | Calmar | **0.67** | 0.61 | 0.21 |
 | Deflated Sharpe (72 parameter trials) | **0.996** ✓ | 0.988 ✓ | — |
+| Deflated Sharpe (**35 strategy trials**) | **0.982** ✓ | 0.957 ✓ | — |
+| PBO (CSCV over 35 configs · monthly · S=16) | **0.303** ✓ | — | — |
 
 **This strategy is measured with the guards switched on** — $5 minimum price, $1M
 minimum dollar volume, and slippage. The universe is the historical S&P 500, so
 there is **no capacity limit**. Raising slippage to 50bps leaves drawdown and
 volatility unchanged and costs 1.4pp of return.
 
-> **The Deflated Sharpe above charges only for the 72 parameter trials inside the
-> walk-forward.** The outer search on top of it — 35 strategies tried, one picked —
-> is **still unpaid**. See below.
+The last two rows charge for the search **outside** the walk-forward — "35 strategies
+were tried and one was picked". The reasoning behind the gate's settings (monthly,
+S=16) is below. Reproduce with `uv run python scripts/strategy_search_cost.py`; it
+reads only `results/oos/` and needs no vendor data.
 
 <!-- PERFORMANCE:END -->
 
-### The debt that is still unpaid — 35 strategy trials
+### Which ruler measures the gate — corrected twice
 
-This repository gates on two numbers, **DSR** and **PBO**, and the DSR above counts
-only what happened *inside* the walk-forward. Running 35 strategies and picking one
-is itself a search, on top of that.
+PBO **flips its verdict with the aggregation frequency and the block count.**
+Measured here:
 
-On 2026-08-17 this spot claimed that search had been measured and **"still clears at
-DSR 0.988 · PBO 0.139"**. **That claim is withdrawn.** Building a reproduction script
-(`scripts/strategy_search_cost.py`) and re-measuring shows **the verdict flips with
-the aggregation choice:**
-
-| Aggregation | PBO (n_blocks 8 / 10 / 12 / 16) | Verdict |
-|---|---|---|
-| **Daily** (4,176 rows) | 0.657 / **0.524** / 0.599 / 0.544 | **fails, every time** |
-| Monthly (201 months) | 0.314 / **0.155** / 0.294 / 0.278 | passes, every time |
+```
+Daily (4,176 rows)   S=8/10/12/16 → 0.657 / 0.524 / 0.599 / 0.544   all fail
+Monthly (201 months) S=8/10/12/16 → 0.314 / 0.155 / 0.294 / 0.278   all pass
+```
 
 Varying the seed from 0 to 5 changes nothing to three decimal places — **this is not
-sampling noise, it is a place where the choice of method decides the answer.** DSR
-moves the same way: at 50bps it is **0.934** daily (fails) against 0.957 monthly.
+sampling noise, it is a place where the choice of method decides the answer.** So the
+choice has to be argued, not assumed.
 
-The 0.139 originally published was **monthly with `n_blocks=10` — the single most
-favourable of the sixteen combinations.** Nothing said so.
+The CSCV paper (Bailey, Borwein, López de Prado & Zhu, 2016) supplies the criterion:
+if the metric is the Sharpe ratio, *"the IID Normal distribution assumption [must] be
+maintained on various slices of the reported performance"*, and **S = 16 is a
+reasonable value in most cases**. Measured against that criterion:
 
-> This is exactly what [CLAUDE.md §1-b](CLAUDE.md) warns about: *a mistake that makes
-> performance look good gives you no reason to suspect it.* Because the number was
-> flattering, nobody re-measured — and with no script, nobody could.
+| Frequency | Obs | Independence (VR−1, abs) | Normality (excess kurtosis) | PBO (S=16) |
+|---|---|---|---|---|
+| Daily | 4,176 | **0.068** best | **16.29** worst | 0.544 ✗ |
+| Weekly | 835 | 0.092 | 13.19 | 0.538 ✗ |
+| **Monthly** | **198** | **0.109** good | **8.90** good | **0.303** ✓ |
+| Quarterly | 66 | 0.345 worst | 2.79 best | 0.675 ✗ |
 
-**So the honest position is:** the cost of the outer search is **not accounted for**,
-and on daily returns this strategy does not clear the gate. Which aggregation is
-correct is a question this repository has not answered — and it will not be filled in
-by reasoning.
+**Monthly is the only frequency that satisfies both.** Daily has excess kurtosis of
+16, so the Sharpe estimator itself is not valid there; quarterly has the best
+normality but lag-1 autocorrelation of 0.218 and only 66 observations.
+
+The mechanism behind daily's failure was measured, not assumed. **The variance ratio
+VR(21) ranges 0.78–1.45 across configurations** (20 of 35 exceed 1.2). VR > 1 means
+daily returns understate that configuration's risk, so ranking 35 configs by daily
+Sharpe compares **numbers inflated by different amounts**. The evidence is a +0.659
+correlation between VR and rank change: `quantus_ens3` (VR 1.44) drops from 6th daily
+to 15th monthly, while the operating candidate (VR 0.99) rises from 13th to **4th**.
+
+#### This spot was wrong twice
+
+1. **2026-08-17, morning** — published "DSR 0.988 · PBO **0.139**". That was the
+   **minimum** of sixteen combinations, with no method stated and no script to
+   reproduce it.
+2. **The same evening** — finding it did not reproduce, the claim was withdrawn
+   entirely as *"does not clear the gate"*. **That was also wrong** — the number was
+   wrong, not the conclusion, and it was withdrawn without measuring which frequency
+   was correct.
+
+> The first error ran in the flattering direction and the second in the unflattering
+> one. **Different directions, same cause: one option picked without a reason.**
+
+**What remains.** Across the 21 possible month-boundary offsets, PBO ranges
+0.143–0.468. All clear the gate, but **the worst case sits close to 0.5.** And the 35
+configurations span different universes, whereas CSCV assumes parameter variants of a
+single strategy. There is only one way to remove that limitation: **pre-register one
+configuration and test it as a single hypothesis.**
 
 ```bash
 uv run python scripts/strategy_search_cost.py   # reproduces the table above
 ```
-
-It reads only the 35 artefacts in `results/oos/`, so **it reproduces without a
-subscription.**
 
 ### Why the headline changed — the micro-cap strategy was retired
 
