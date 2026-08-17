@@ -1,4 +1,4 @@
-# opt_portfolio
+# portfolio-research
 
 **English** · [한국어](README.ko.md)
 
@@ -163,7 +163,7 @@ The cause was measured, not inferred — with the guards on, **98% of the univer
 disappears.** At quarter-ends only 15–43 candidates remain, so the portfolio stops
 being "the top 20 of a thousand" and becomes "everything that exists". Median daily
 dollar volume of the actual holdings was about $45k, and two of them were **zero**.
-Deployable capital caps out around $150k.
+Deployable capital caps out around ₩100M (roughly $70k).
 
 The same verification showed **slippage was not the problem** — even at a punishing
 150bps the strategy clears at DSR 0.995. The liquidity filters are what broke it.
@@ -540,10 +540,15 @@ Design documents are written in Korean and live in [`docs/factor-system/`](docs/
 - **Data stops at 2026-08-14** (subscription ended). No further updates — `ingest` now fails, and that is not a bug.
 - Taxes are not modelled.
 
-> **One debt repaid.** This spot used to read *"factor selection is not charged to the
-> Deflated Sharpe trial count."* On 2026-08-17 all 35 result series were re-measured on
-> their common window and cleared the gate at **DSR 0.988 · PBO 0.139** — the last two
-> rows of the performance table above.
+- **The factor set itself is not charged.** 124 factors were screened to arrive at the
+  five that are used; that screening is a search, and no trial count pays for it.
+
+> **One debt repaid.** The outer search — 35 strategies tried, one picked — is now
+> charged and reproducible: **PBO 0.303 · DSR 0.982 (15bps) / 0.957 (50bps)**, on
+> monthly returns with S = 16. Those are the last two rows of the performance table
+> above; why that ruler, and the two wrong numbers published before it, are in
+> *Which ruler measures the gate* above. Reproduce with
+> `uv run python scripts/strategy_search_cost.py` — no subscription needed.
 
 **TAA**
 
