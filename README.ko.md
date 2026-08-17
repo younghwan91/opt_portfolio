@@ -516,9 +516,9 @@ MIT
 
 ## ⭐ 도움이 되셨다면
 
-이 프로젝트가 유용했다면 우측 상단 **[⭐ Star](https://github.com/younghwan91/opt_portfolio)** 를 눌러주세요. 검색·추천 노출이 올라가 더 많은 분들이 찾을 수 있습니다.
+이 프로젝트가 유용했다면 우측 상단 **[⭐ Star](https://github.com/younghwan91/portfolio-research)** 를 눌러주세요. 검색·추천 노출이 올라가 더 많은 분들이 찾을 수 있습니다.
 
-- 🐛 버그·질문 → [Issues](https://github.com/younghwan91/opt_portfolio/issues)
+- 🐛 버그·질문 → [Issues](https://github.com/younghwan91/portfolio-research/issues)
 - 📈 업데이트 소식 → [팔로우 @younghwan91](https://github.com/younghwan91)
 
 ## 관련 프로젝트 — 오픈소스 퀀트 스택

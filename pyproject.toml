@@ -59,9 +59,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/younghwan91/opt_portfolio"
-Documentation = "https://github.com/younghwan91/opt_portfolio#readme"
-Repository = "https://github.com/younghwan91/opt_portfolio.git"
+Homepage = "https://github.com/younghwan91/portfolio-research"
+Documentation = "https://github.com/younghwan91/portfolio-research#readme"
+Repository = "https://github.com/younghwan91/portfolio-research.git"
 
 [project.scripts]
 opt-portfolio = "opt_portfolio.ui.cli:main"

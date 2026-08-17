@@ -543,9 +543,9 @@ MIT
 
 ## ⭐ If this helped
 
-If you found this useful, please **[⭐ Star](https://github.com/younghwan91/opt_portfolio)** the repository — it improves discoverability for others looking for the same thing.
+If you found this useful, please **[⭐ Star](https://github.com/younghwan91/portfolio-research)** the repository — it improves discoverability for others looking for the same thing.
 
-- 🐛 Bugs & questions → [Issues](https://github.com/younghwan91/opt_portfolio/issues)
+- 🐛 Bugs & questions → [Issues](https://github.com/younghwan91/portfolio-research/issues)
 - 📈 Updates → [Follow @younghwan91](https://github.com/younghwan91)
 
 ## Related projects — open-source quant stack
