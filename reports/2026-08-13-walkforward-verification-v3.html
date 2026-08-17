@@ -108,7 +108,7 @@ hr{border:0; border-top:1px solid var(--rule); margin:44px 0}
 
 <header class="col">
   <p class="eyebrow">Walk-Forward 검증 · 3판</p>
-  <h1>기존 전략에 낙폭 통제를 얹은 조합이 최종 채택됐다</h1><p style="margin:1rem 0;padding:.75rem 1rem;border-left:3px solid #999;background:rgba(128,128,128,.08);font-size:.9em"><strong>2026-08-16.</strong> 이 판은 발행 당시 그대로다. 이후 검증에서 <strong>여기 실린 성과가 방어 장치(슬리피지·최소 주가·최소 거래대금)를 끈 상태의 값</strong>임이 드러났다 — 켜면 무너진다. 경위는 <code>docs/factor-system/07-experiment-log.md</code> §5.5 에 있다.</p>
+  <h1>기존 전략에 낙폭 통제를 얹은 조합이 최종 채택됐다</h1><p style="margin:1rem 0;padding:.75rem 1rem;border-left:4px solid #e34948;background:rgba(227,73,72,.08);font-size:.95em"><strong>⚠ 이 보고서의 결론은 폐기됐다 (2026-08-16).</strong> 이 판은 발행 당시 그대로 두지만, 위 제목이 말하는 <strong>초소형주 전략은 더 이상 채택 전략이 아니다.</strong><br><br>여기 실린 성과는 <strong>방어 장치(슬리피지·최소 주가 $5·최소 거래대금 $1M)를 끈 상태의 값</strong>이다. 켜고 다시 재면 Sharpe 1.047 → <strong>−0.224</strong>, 최대낙폭 −23.7% → <strong>−99.2%</strong> 로 무너진다 — 유니버스의 98%가 사라지기 때문이다. 원금 상한도 1억 남짓이었다.<br><br>현재 운용 후보는 <strong>대형주 5팩터 + 200일 타이밍</strong>(<code>configs/strategy_lean_timed.json</code>)이며 방어를 켠 채로 측정한 값이다. 경위는 <code>docs/factor-system/07-experiment-log.md</code> §5.5·§5.8, 요약은 저장소 README.</p>
   <p class="deck">우리가 처음부터 설계한 팩터 조합보다, <strong>이미 쓰고 있던 소형주 전략에 200일 이평 타이밍을 얹은 쪽</strong>이 모든 지표에서 앞섰다.
   수익은 오르고 최대 낙폭은 −63.8%에서 −23.7%로 줄었다. 3판에서 새로 시험한 것은 20가지가 넘고, <strong>채택된 것은 이 하나뿐이다.</strong></p>
   <div class="meta">

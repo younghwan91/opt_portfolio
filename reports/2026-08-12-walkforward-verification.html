@@ -114,7 +114,7 @@ hr{border:0; border-top:1px solid var(--rule); margin:44px 0}
 
 <header class="col">
   <p class="eyebrow">Walk-Forward 검증 · 개정 2판</p>
-  <h1>팩터를 줄이고 탐색을 줄이자 전략이 유의성 관문을 넘었다</h1><p style="margin:1rem 0;padding:.75rem 1rem;border-left:3px solid #999;background:rgba(128,128,128,.08);font-size:.9em"><strong>2026-08-16.</strong> 이 판은 발행 당시 그대로다. 이후 검증에서 <strong>여기 실린 성과가 방어 장치(슬리피지·최소 주가·최소 거래대금)를 끈 상태의 값</strong>임이 드러났다 — 켜면 무너진다. 경위는 <code>docs/factor-system/07-experiment-log.md</code> §5.5 에 있다.</p>
+  <h1>팩터를 줄이고 탐색을 줄이자 전략이 유의성 관문을 넘었다</h1><p style="margin:1rem 0;padding:.75rem 1rem;border-left:4px solid #e34948;background:rgba(227,73,72,.08);font-size:.95em"><strong>⚠ 이 보고서의 결론은 폐기됐다 (2026-08-16).</strong> 이 판은 발행 당시 그대로 두지만, 위 제목이 말하는 <strong>초소형주 전략은 더 이상 채택 전략이 아니다.</strong><br><br>여기 실린 성과는 <strong>방어 장치(슬리피지·최소 주가 $5·최소 거래대금 $1M)를 끈 상태의 값</strong>이다. 켜고 다시 재면 Sharpe 1.047 → <strong>−0.224</strong>, 최대낙폭 −23.7% → <strong>−99.2%</strong> 로 무너진다 — 유니버스의 98%가 사라지기 때문이다. 원금 상한도 1억 남짓이었다.<br><br>현재 운용 후보는 <strong>대형주 5팩터 + 200일 타이밍</strong>(<code>configs/strategy_lean_timed.json</code>)이며 방어를 켠 채로 측정한 값이다. 경위는 <code>docs/factor-system/07-experiment-log.md</code> §5.5·§5.8, 요약은 저장소 README.</p>
   <p class="deck">1판에서 두 전략을 “우연과 구분 불가”로 기각했다. <strong>그 판정은 측정 버그였다.</strong>
   단위 오류를 고치고, 팩터를 사전 근거로 5개까지 줄이고, 탐색 횟수를 228회에서 57회로 낮추자
   Deflated Sharpe 가 <strong>0.93–1.00</strong> 으로 올라왔다. 관문은 0.95 다.</p>
