@@ -2,22 +2,27 @@
 
 **English** · [한국어](README.ko.md)
 
-**US equity factor engine + tactical asset allocation (VAA) backtester.**
+**US equity factor engine + tactical asset allocation (TAA) validation system.**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-younghwan--chae-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/younghwan-chae/)
 
-Two independent subsystems live in this repository.
+Three subsystems live in this repository.
 
-| | **Factor engine** (`factor/`) | **VAA allocation** (`strategies/`·`analysis/`) |
-|---|---|---|
-| Scope | US single stocks (20,931 tickers, 1997–2026) | 7–11 ETFs |
-| Question | Which stocks to buy | Which asset class to rotate into |
-| Data | Sharadar direct (point-in-time, delisted included) | yfinance daily closes |
-| Entry point | `opt-factor` · `opt-factor-tui` | `make run` · `run.py` |
+| | **Factor engine** (`factor/`) | **TAA allocation** (`taa/`) | **Original VAA** (`strategies/`) |
+|---|---|---|---|
+| Scope | US single stocks (20,931 tickers, 1997–2026) | 18 ETFs | 7–11 ETFs |
+| Question | Which stocks to buy | Which asset class to rotate into | (same — first attempt) |
+| Data | Sharadar direct (point-in-time, delisted included) | Sharadar funds bulk (`closeadj`) | yfinance daily closes |
+| Entry point | `opt-factor` · `opt-factor-tui` | `scripts/run_taa.py` | `make run` · `run.py` |
+| Outcome | **1 adopted** (large-cap) | **0 adopted** — all 9 failed the PBO gate | Kept as the record of why it failed |
 
-**The two are fully isolated at the code level** — neither imports the other; the only shared symbol is `config.RISK_FREE_RATE`.
+**There is one isolation rule and one exception.** None of the three imports another.
+The single exception is `taa/` → `factor.research.overfitting` (DSR and PBO): those
+functions take a plain return series, so the coupling is thin, and **not trusting
+performance produced without a gate is this repository's standing rule.** Imports in
+the other direction are forbidden.
 
 ---
 
@@ -64,22 +69,56 @@ parts company with SPY. (Chart labels are Korean; the alt text carries the readi
 | Sharpe | **0.727** | 0.648 | 0.418 |
 | Calmar | **0.67** | 0.61 | 0.21 |
 | Deflated Sharpe (72 parameter trials) | **0.996** ✓ | 0.988 ✓ | — |
-| Deflated Sharpe (**35 strategy trials**) | **0.988** ✓ | 0.969 ✓ | — |
-| PBO (CSCV over 35 configurations) | **0.139** ✓ | — | — |
 
 **This strategy is measured with the guards switched on** — $5 minimum price, $1M
 minimum dollar volume, and slippage. The universe is the historical S&P 500, so
 there is **no capacity limit**. Raising slippage to 50bps leaves drawdown and
 volatility unchanged and costs 1.4pp of return.
 
-The last two rows were added on 2026-08-17. Until then the Deflated Sharpe only
-charged for the 72 parameter trials *inside* the walk-forward; the outer search —
-"35 strategies were tried and one was picked" — went uncounted, a debt the
-experiment log had recorded and left open. Re-measured across all 35 result series
-on their common window (2009-12 onward, 201 months), it still clears at
-**DSR 0.988 · PBO 0.139**.
+> **The Deflated Sharpe above charges only for the 72 parameter trials inside the
+> walk-forward.** The outer search on top of it — 35 strategies tried, one picked —
+> is **still unpaid**. See below.
 
 <!-- PERFORMANCE:END -->
+
+### The debt that is still unpaid — 35 strategy trials
+
+This repository gates on two numbers, **DSR** and **PBO**, and the DSR above counts
+only what happened *inside* the walk-forward. Running 35 strategies and picking one
+is itself a search, on top of that.
+
+On 2026-08-17 this spot claimed that search had been measured and **"still clears at
+DSR 0.988 · PBO 0.139"**. **That claim is withdrawn.** Building a reproduction script
+(`scripts/strategy_search_cost.py`) and re-measuring shows **the verdict flips with
+the aggregation choice:**
+
+| Aggregation | PBO (n_blocks 8 / 10 / 12 / 16) | Verdict |
+|---|---|---|
+| **Daily** (4,176 rows) | 0.657 / **0.524** / 0.599 / 0.544 | **fails, every time** |
+| Monthly (201 months) | 0.314 / **0.155** / 0.294 / 0.278 | passes, every time |
+
+Varying the seed from 0 to 5 changes nothing to three decimal places — **this is not
+sampling noise, it is a place where the choice of method decides the answer.** DSR
+moves the same way: at 50bps it is **0.934** daily (fails) against 0.957 monthly.
+
+The 0.139 originally published was **monthly with `n_blocks=10` — the single most
+favourable of the sixteen combinations.** Nothing said so.
+
+> This is exactly what [CLAUDE.md §1-b](CLAUDE.md) warns about: *a mistake that makes
+> performance look good gives you no reason to suspect it.* Because the number was
+> flattering, nobody re-measured — and with no script, nobody could.
+
+**So the honest position is:** the cost of the outer search is **not accounted for**,
+and on daily returns this strategy does not clear the gate. Which aggregation is
+correct is a question this repository has not answered — and it will not be filled in
+by reasoning.
+
+```bash
+uv run python scripts/strategy_search_cost.py   # reproduces the table above
+```
+
+It reads only the 35 artefacts in `results/oos/`, so **it reproduces without a
+subscription.**
 
 ### Why the headline changed — the micro-cap strategy was retired
 
@@ -199,7 +238,7 @@ Only factors with a documented rationale are included — Novy-Marx (2013), Sloa
 > needs the subscription below. The vendor's raw data is a paid product and cannot
 > be redistributed; that is a licensing constraint, not a disclosure policy.
 >
-> **Data requirement.** The factor engine needs a [Sharadar](https://sharadar.com) subscription (Bundle, from $29/mo) — it is the only retail-priced source that provides point-in-time fundamentals *and* delisted coverage together. Without it the engine runs but has nothing to run on. The vendor adapter is isolated behind a neutral `Provider` protocol, so swapping in another source means rewriting one file. The VAA subsystem uses free yfinance data and needs no subscription.
+> **Data requirement.** The factor engine needs a [Sharadar](https://sharadar.com) subscription (Bundle, from $29/mo) — it is the only retail-priced source that provides point-in-time fundamentals *and* delisted coverage together. Without it the engine runs but has nothing to run on. The vendor adapter is isolated behind a neutral `Provider` protocol, so swapping in another source means rewriting one file. `taa/` uses the same Sharadar bulk (the funds tables). The only thing that runs without a subscription is the original VAA in `strategies/` (yfinance).
 
 ```bash
 # Ingest data (Sharadar subscription required)
@@ -263,7 +302,7 @@ records what the walk-forward said about it on this universe.
 
 | Technique | Verdict |
 |---|---|
-| Market-timing overlay (Faber 200-day MA) | **Adopted** — drawdown −63.8% → −23.7% |
+| Market-timing overlay (Faber 200-day MA) | **Adopted** — drawdown −63.8% → −23.7% (measured on the micro-cap universe; the operating large-cap candidate uses the same overlay) |
 | Equal weighting | **Adopted** — beat all six optimised schemes (DeMiguel 1/N) |
 | No-trade band (`hold_multiple`) | **Rejected** — turnover −23%, return −0.86pp |
 | Regime-conditional factor weights | **Rejected** — 16.90% → 15.45%, too few samples per regime |
@@ -292,43 +331,106 @@ Seven weighting schemes ship: equal · market-cap · inverse-volatility · risk 
 
 ---
 
-# 2. VAA allocation
+# 2. Tactical asset allocation (TAA)
 
-An implementation of Wouter Keller's Vigilant Asset Allocation, validated walk-forward.
+Rotating between a handful of ETFs each month rather than picking single stocks.
+There is exactly one result here — **nine configurations were pre-registered and
+all nine were rejected.** How that happened is this section.
 
-### Momentum score (Keller 13612)
+## It started with VAA, and VAA failed
+
+Wouter Keller's Vigilant Asset Allocation (2017) was the starting point.
 
 ```
-momentum = 12·R(1M) + 4·R(3M) + 2·R(6M) + 1·R(12M)
+momentum = 12·R(1M) + 4·R(3M) + 2·R(6M) + 1·R(12M)      ← Keller 13612W
 ```
 
-### Selection rule
+- Buy the top-momentum asset from the **offensive universe** (`SPY`, `EFA`, `EEM`, `AGG`).
+- But if **any** of the four shows negative absolute momentum, treat it as risk-off and
+  rotate to the top of the **defensive universe** (`LQD`, `IEF`, `SHY`) — the breadth rule.
 
-- Pick the top-momentum asset from the **offensive universe** (`SPY`, `EFA`, `EEM`, `AGG`).
-- If **any** offensive asset shows negative absolute momentum, treat it as a risk-off signal and rotate to the top of the **defensive universe** (`LQD`, `IEF`, `SHY`).
-- 50% to the VAA selection, 12.5% each to the core sleeve (`SPY`, `TLT`, `GLD`, `BIL`) — configurable.
+The papers report 16–17% a year. **Measured here it is 6.07%** (2008-07 to 2026-08,
+218 months). The implementation is not wrong; the cause measures out like this:
 
-### Results
+| What | Measured |
+|---|---|
+| Share of months spent in **defensive** assets | **55.7%** |
+| Of which, months parked in `SHY` alone | 44 — yielding ~0.05% at the time, effectively cash |
+| Keller's validation window | 1970–2015 — **when defensive assets themselves paid 8–15%** |
 
-![15-year VAA comparison](backtest_comparison.png)
+So VAA spends more than half its life somewhere "safe", and **since 2008 the safe
+place pays nothing.** The premise does not match the era. Full diagnosis in the
+[design document](docs/superpowers/specs/2026-08-17-taa-strategy-design.md) §0 (Korean).
 
-15 years, $10,000 initial. Dynamic VAA reaches **$22,813** (CAGR 5.7%, Sharpe 0.110). An
-earlier version of this section reported ~$29k with Sharpe inflated 20.9× by an
-annualization bug (monthly returns annualized with √252 instead of √12, fixed in
-`b9043d7`) — the actual numbers are lower on both counts.
+> Separately, an earlier version of this README inflated the Sharpe by **20.9×** —
+> monthly returns annualized with √252 instead of √12 (fixed in `b9043d7`). Returns
+> were right and only the risk metrics were wrong, which is why it survived so long.
+> Regression test: `tests/test_risk_annualization.py`.
 
-**Why CAGR sits at 5.7% instead of the ~17% cited in Keller's papers:** the strategy
-spent **54.7% of months in defensive assets**, and one of them, `SHY`, held **44
-months (24.4%)** at roughly 0.05% annualized yield — near zero — while `SPY`
-buy-and-hold returned far more over the same stretch. Keller's headline figures come
-from a 1970–2015 sample where defensive assets themselves returned 8–15%; this is not
-a bug in the implementation, it is a regime the strategy's assumptions no longer
-match. Full diagnosis: `docs/superpowers/specs/2026-08-17-taa-strategy-design.md` §0.
+## So a replacement was built — and rejected too
+
+VAA's disease was not how often it went defensive but **what it bought when it did.**
+So nine configurations, centred on Keller's later BAA (2022) which separates the
+canary (alarm) assets from the investment universe, were **registered before any
+result was seen** and measured in one pass.
+
+| Configuration | CAGR | Max DD | Calmar | DSR |
+|---|---|---|---|---|
+| `spy` (baseline) | 12.46% | −41.8% | 0.298 | 0.968 |
+| `static_60_40` (baseline) | 8.87% | −25.1% | 0.354 | 0.986 |
+| `vaa_g4` | 6.07% | −20.9% | 0.290 | 0.871 |
+| `baa_agg` | 8.82% | −16.5% | 0.535 | 0.976 |
+| `baa_bal` | 7.28% | −11.1% | 0.654 | 0.994 |
+| `baa_agg_ma` | 8.81% | −13.4% | 0.656 | 0.985 |
+| `baa_bal_tranche` | 8.11% | −11.3% | 0.717 | 0.996 |
+| `baa_bal_ma_tranche` | 7.32% | −10.0% | 0.731 | 0.997 |
+| `baa_bal_ma` | 6.72% | **−8.3%** | **0.812** | 0.997 |
+
+**PBO = 0.770 → nothing adopted.** The gate was not relaxed.
+
+PBO 0.77 means *"pick the in-sample winner among these nine and it lands below median
+out-of-sample 77% of the time."* It does **not** mean nothing works — and that
+distinction is the most important thing in this section. All six BAA variants beat
+60/40 on Calmar, without exception (0.535–0.812 against 0.354). At the same time,
+PBO across just those six is **0.861**: which one is best cannot be determined from
+this data.
+
+> Both sentences have to stand together. "BAA beats 60/40" and "which BAA is best is
+> unknown" are **both true**, and collapsing to either one alone gives a wrong answer.
+
+Testing this honestly requires **picking one BAA configuration in advance and
+pre-registering it against 60/40 as a single hypothesis.** Choosing the
+best-performing variant after the fact and declaring it the winner is a mistake this
+repository already made once on the factor side.
+
+## Defects caught in this round
+
+**With nothing adopted, these are worth more than the results.** Almost every one
+pushed performance in the flattering direction — and mistakes in that direction give
+you no reason to suspect them, so they live longest.
+
+This is the complete list from the source document — §3 (one methodological defect)
+and §4 (six implementation defects) — plus one recorded only in code comments.
+
+| # | Defect | Effect |
+|---|---|---|
+| §3 | Tranches **shifted the whole price panel**, so each sleeve measured a different period | Smoothing, not diversification. Sleeve correlation 0.381 (0.819 once fixed). Fixing it moved **PBO 0.139 → 0.770** |
+| §4-1 | Return labels were off by one month (a defect in the plan, not the code) | Labelling by realisation month, not decision month, is what keeps it look-ahead free |
+| §4-2 | The spec said the common window began 2007-06; it actually begins 2008-07 (`BIL` listing + warm-up) | 230 months → **218 months** |
+| §4-3 | Configuration 9 was a **silent duplicate** of configuration 8 (an `if`/`elif` dispatch) | Only 8 of the 9 pre-registered configs actually differed |
+| §4-4 | §5 made PBO the primary gate but the §6 adoption formula omitted it | The passive baselines (`spy`, `60/40`) get rejected for "PBO exceeded" — though they are not products of the search |
+| §4-5 | `run_with_ma_overlay` and `run_with_tranches` ignored the "prepend principal to equity" convention | Tranche max DD −9.35% against an actual −10.99% — and the error favoured **the four improvement candidates** specifically |
+| §4-6 | The same missing-principal bug existed **separately** in `summarize()` | `baa_bal_tranche` max DD −9.72% → −11.31%. Fixing one does not fix the other |
+| (code) | `pandas.pct_change()` pads missing values by default, **fabricating 0% returns** | `fill_method=None` forced across every signal (`taa/signals.py`) |
+
+The full trail, including the pre-registered predictions checked against the results,
+is in [`docs/taa/01-results.md`](docs/taa/01-results.md) (Korean).
 
 ```bash
-make run                     # interactive menu
-python3 run.py --backtest    # dynamic VAA backtest
-python3 run.py --optimize    # Sharpe-based weight optimisation
+uv run python scripts/run_taa.py    # 9 configurations · PBO · verdict table
+
+make run                            # original VAA (yfinance, kept for the record)
+python3 run.py --backtest
 ```
 
 ---
@@ -348,7 +450,14 @@ src/opt_portfolio/
 │   ├── research/              #   IC · quantiles · DSR/PBO · regimes · factor selection
 │   ├── holdings.py            #   today's picks · trade plan
 │   └── tui.py                 #   operating console
-├── strategies/                # VAA — momentum · asset selection · OU forecast (experimental)
+├── taa/                       # tactical allocation — 9 pre-registered configs · PBO gate
+│   ├── data.py                #   Sharadar funds bulk → dividend-adjusted price panel
+│   ├── signals.py             #   13612W momentum · 200-day moving average
+│   ├── strategy.py            #   StrategySpec (canary / offensive / defensive universes)
+│   ├── backtest.py            #   monthly rebalance · MA overlay · tranches
+│   ├── registry.py            #   the 9 pre-registered configurations · N_TRIALS
+│   └── evaluate.py            #   DSR · PBO · adoption verdict
+├── strategies/                # original VAA — momentum · asset selection · OU forecast (experimental)
 ├── analysis/                  # backtest · optimiser · risk · performance
 ├── core/                      # DuckDB incremental cache · positions
 └── config.py                  # frozen dataclass settings
@@ -358,7 +467,7 @@ src/opt_portfolio/
 
 ```bash
 make install        # uv sync --extra dev
-make test           # pytest + coverage (292 tests)
+make test           # pytest + coverage (399 tests)
 make lint           # ruff check + format --check
 make typecheck      # mypy src/
 ```
@@ -378,20 +487,33 @@ Design documents are written in Korean and live in [`docs/factor-system/`](docs/
 | `05-math-spec.md` | Weighting, backtest and walk-forward mathematics |
 | `06-provider-review.md` | Comparison of 12 data vendors |
 | `07-experiment-log.md` | **Experiment log — adopted strategy · rejection list · reproduction steps** |
+| [`taa/01-results.md`](docs/taa/01-results.md) | **TAA results — 9 configurations, 0 adopted, 6 defects caught** |
 
 ## Limitations
 
-**Factor engine**
+**Factor engine (operating candidate = the large-cap strategy)**
 
-- The **micro-cap universe** carries wide bid-ask spreads. The backtest assumes 0.5% commission and **zero slippage** — *that assumption is not data.* Sizing it: 2.7 portfolio turns a year means every 1% of round-trip slippage costs ~2.7%/yr, so plausible spreads erase 5–8%/yr. Measuring realised spreads against the actual holdings is the single most valuable open task in this repository.
-- **Capacity is limited.** Switching to value weighting cuts Sharpe by 28%, which means the alpha sits in small names. The result will not survive at institutional size.
-- **Factor selection is not charged to the Deflated Sharpe trial count.** Screening 124 factors and picking a handful is itself a search (`research/selection.py` exists to repay this debt).
+- **The window contains only three major drawdowns** (2008, 2020, 2022). A strategy whose claim is drawdown defence rests that claim on three events. This is the largest remaining limitation.
+- **Transaction costs are an assumption, not a measurement.** Both 15bps and 50bps are reported and the conclusion holds at either (DSR 0.996 / 0.988), but **the realised bid-ask spread of the actual holdings has never been measured.** The universe is the historical S&P 500, so this is less dangerous than it was for micro caps.
+- **Data stops at 2026-08-14** (subscription ended). No further updates — `ingest` now fails, and that is not a bug.
 - Taxes are not modelled.
 
-**VAA**
+> **One debt repaid.** This spot used to read *"factor selection is not charged to the
+> Deflated Sharpe trial count."* On 2026-08-17 all 35 result series were re-measured on
+> their common window and cleared the gate at **DSR 0.988 · PBO 0.139** — the last two
+> rows of the performance table above.
 
-- Optimised weights are in-sample; robustness must be checked separately.
-- Fixed 0.1% transaction cost, yfinance daily closes, 5% risk-free assumption, single 15-year window.
+**TAA**
+
+- **Nothing was adopted, so there is no operating conclusion here.** PBO 0.770 was not relaxed.
+- 218 months of sample, containing the same three drawdowns.
+- The final month is **half a month** — the data stops on 2026-08-14, so `to_monthly` labels half a month's move as a full one. `run_taa.py` prints a warning.
+- Nothing before an ETF's listing is visible. The papers extend to the 1970s using index proxies; only real ETF prices were used here.
+
+**Original VAA (`strategies/`, kept for the record)**
+
+- Optimised weights are in-sample. Fixed 0.1% transaction cost, yfinance daily closes, single 15-year window.
+- **These numbers differ from `vaa_g4` in `taa/`** — different data source, different window. For comparison, use the `taa/` figures.
 
 > ⚠️ All backtests are historical and do not guarantee future returns.
 
