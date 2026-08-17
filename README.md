@@ -43,69 +43,84 @@ Quant backtests fail in a small number of well-known ways. Each one is blocked s
 
 <!-- PERFORMANCE:START -->
 
-*Adopted strategy · walk-forward out-of-sample · 2002-12 – 2026-08 (23.6y)*
+*Operating candidate · walk-forward validation window · 2002-12 – 2026-08 (23.6y)*
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/performance-dark.png">
-  <img alt="Walk-forward out-of-sample performance versus SPY" src="docs/images/performance-light.png">
-</picture>
+**Large-cap, 5 factors + 200-day moving-average timing overlay** (`configs/strategy_lean_timed.json`)
 
-| Metric | Strategy | SPY (same window) |
-|---|---|---|
-| CAGR | **23.78%** | 11.66% |
-| Max drawdown | **-23.7%** | -55.2% |
-| Volatility | **17.0%** | 18.6% |
-| Sharpe | **1.047** | 0.418 |
-| Calmar | **1.00** | 0.21 |
-| **Deflated Sharpe** (72 trials) | **1.000** ✓ | — |
+| Metric | Slippage 15bps | Slippage 50bps | SPY (same window) |
+|---|---|---|---|
+| CAGR | **16.34%** | 14.91% | 11.66% |
+| Max drawdown | −24.3% | −24.3% | −55.2% |
+| Volatility | 15.7% | 15.7% | 18.6% |
+| Sharpe | **0.727** | 0.648 | 0.418 |
+| Calmar | **0.67** | 0.61 | 0.21 |
+| Deflated Sharpe (72 parameter trials) | **0.996** ✓ | 0.988 ✓ | — |
+| Deflated Sharpe (**35 strategy trials**) | **0.988** ✓ | 0.969 ✓ | — |
+| PBO (CSCV over 35 configurations) | **0.139** ✓ | — | — |
 
-Cumulative 153.0× over the validation window. Verification reports are published in [`reports/`](reports/). Since the configs are public, the holdings are reproducible with `opt-factor holdings`.
+**This strategy is measured with the guards switched on** — $5 minimum price, $1M
+minimum dollar volume, and slippage. The universe is the historical S&P 500, so
+there is **no capacity limit**. Raising slippage to 50bps leaves drawdown and
+volatility unchanged and costs 1.4pp of return.
 
-> ## ⚠ 2026-08-16 — the numbers above are measured **with the guards off**
->
-> Switching on the three the design document calls mandatory (slippage, minimum
-> price, minimum dollar volume) collapses the strategy: **Sharpe 1.047 → −0.224,
-> DSR 1.000 → 0.002.** 98% of the universe disappears, leaving 15–43 candidates.
-> Median daily dollar volume of the actual holdings is about $45k, which caps
-> deployable capital at roughly $150k.
->
-> **The operating candidate is now the large-cap variant**
-> (`configs/strategy_lean_timed.json`) — guards on, CAGR 16.34%, Sharpe 0.727,
-> **DSR 0.996**, no capacity limit. Full trail in
-> [`07-experiment-log.md`](docs/factor-system/07-experiment-log.md) §5.5, §5.8 (Korean).
-
-**Read the headline carefully.** Restricted to the window the previous protocol covered (2007-12 onward), this strategy returns 16.92% CAGR at Sharpe 0.758 — statistically identical to the 10-year-training result (16.90% / 0.756). The entire uplift comes from the newly included 2003–2007, a small-cap bull market that alone ran at 53% CAGR. Halving the training window left the overlapping period unchanged, which is evidence of robustness, not of a better strategy.
+The last two rows were added on 2026-08-17. Until then the Deflated Sharpe only
+charged for the 72 parameter trials *inside* the walk-forward; the outer search —
+"35 strategies were tried and one was picked" — went uncounted, a debt the
+experiment log had recorded and left open. Re-measured across all 35 result series
+on their common window (2009-12 onward, 201 months), it still clears at
+**DSR 0.988 · PBO 0.139**.
 
 <!-- PERFORMANCE:END -->
 
-Currently adopted strategy: US small caps, blended value and growth factors + 200-day moving-average timing overlay, quarterly rebalance, equal weight.
+### Why the headline changed — the micro-cap strategy was retired
+
+Until 2026-08-16 this space held a **micro-cap, 8-factor strategy** at CAGR 23.78%
+and Sharpe 1.047. Switching on the three guards the design document calls mandatory
+(slippage, $5 minimum price, $1M minimum dollar volume) collapsed it:
+**Sharpe 1.047 → −0.224, max drawdown −23.7% → −99.2%.**
+
+The cause was measured, not inferred — with the guards on, **98% of the universe
+disappears.** At quarter-ends only 15–43 candidates remain, so the portfolio stops
+being "the top 20 of a thousand" and becomes "everything that exists". Median daily
+dollar volume of the actual holdings was about $45k, and two of them were **zero**.
+Deployable capital caps out around $150k.
+
+The same verification showed **slippage was not the problem** — even at a punishing
+150bps the strategy clears at DSR 0.995. The liquidity filters are what broke it.
+
+So the operating candidate moved to the large-cap variant. It had previously been
+set aside for "lower returns" — but **it always had its guards on while the
+micro-cap strategy had them off**, so the two had never been compared under the
+same conditions. Under the same conditions it is DSR 0.996 against 0.002.
+
+The full trail is in
+[`docs/factor-system/07-experiment-log.md`](docs/factor-system/07-experiment-log.md)
+§5.5 and §5.8 (Korean).
 
 ### Everything is published
 
-The engine, all 158 factor definitions, and **the adopted parameters** — they are
-all in `configs/`. They were withheld for a day and then opened: the withheld
-recipe (micro-cap) collapses once the tradability guards are switched on, so it
-was never something that could actually be run, and the large-cap strategy that
-can be run has no capacity limit and therefore nothing to protect. The reasoning
-is in [`configs/README.md`](configs/README.md) (Korean).
+The engine, all 158 factor definitions, and **the adopted parameters** are in
+`configs/`. They were withheld for a day and then opened: the withheld recipe
+(micro-cap) collapses once the guards are on, so it was never something that could
+be run, and the large-cap strategy that can be run has no capacity limit and
+therefore nothing to protect. Reasoning in
+[`configs/README.md`](configs/README.md) (Korean).
 
 ### Before you believe that curve
 
-What is structurally sound: no look-ahead (parameters are chosen inside each training
-window and the validation window is run once), no survivorship bias (delisted names are
-in the universe), no restatements (first print wins), and 0.5% commission already deducted.
+**Structurally sound**: no look-ahead (parameters chosen inside each training window,
+validation run once), no survivorship bias (delisted names are in the universe), no
+restatements (first print wins), and commissions, slippage and liquidity filters all
+switched on.
 
-What is **not** trustworthy at face value:
+**Remaining limits**:
 
-| Assumption | Why it matters |
+| | |
 |---|---|
-| **Slippage = 0** | Micro-cap spreads run 1–5%. At 67% turnover per rebalance — 2.7 turns a year — **every 1% of round-trip slippage costs ~2.7%/yr.** Realistic spreads could take 5–8%/yr off this curve. That assumption is not data, and it has not been measured yet. |
-| **Capacity** | Value weighting cuts Sharpe by 28%, i.e. the alpha sits in the smallest names. At size this result does not exist. |
-| **Period concentration** | 2003–2007 alone compounded at 53%/yr — the steep early section of the chart. |
-| **Factor screening** | 124 factors were screened to pick 8. That search is not charged to the 72 trials the Deflated Sharpe deflates for. |
-
-The engineering is real; the number is optimistic. How optimistic is an open question
-until spreads are measured against the actual holdings.
+| **Window** | 23.6 years from 2002-12, 24 walk-forward folds. It contains three large drawdowns: 2008, 2020, 2022 |
+| **Data frozen** | Stops at 2026-08-14 (subscription ended). No further updates |
+| **Taxes** | Not modelled |
+| **Costs** | Reported at both 15bps and 50bps. Realised spreads were never measured against the actual holdings |
 
 **The Deflated Sharpe is the number that matters here.** It subtracts the maximum Sharpe you would expect from pure noise given how many variants were tried, leaving what is actually left over. A strategy that cannot clear 0.95 is not adopted — more than twenty candidates were rejected at this gate in this repository.
 
@@ -175,8 +190,9 @@ opt-factor holdings --store us.duckdb \
 opt-factor-tui --store us.duckdb --config configs/strategy.json
 ```
 
-A strategy is fully declared by one JSON file. Below is the **adopted strategy**
-(`configs/strategy_quantus_timed.json`).
+A strategy is fully declared by one JSON file. Below is the **retired micro-cap
+strategy** (`configs/strategy_quantus_timed.json`), kept to show what switching the
+guards off looks like. The operating candidate is `configs/strategy_lean_timed.json`.
 
 ```jsonc
 {
