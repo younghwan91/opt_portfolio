@@ -9,15 +9,25 @@
 # 대기 조건을 검사하지 않는 것이 요점이다. `;` 로 이은 한 줄은 정의상
 # 순차 실행이고, 경쟁할 상대가 없다.
 #
-#   nohup sh scripts/run_backtests.sh > ~/data/queue.log 2>&1 &
+#   nohup sh scripts/run_backtests.sh > ~/data/logs/queue.log 2>&1 &
 set -u
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 STORE=${STORE:-$HOME/data/us_micro.duckdb}
 UNIVERSE=${UNIVERSE:-$HOME/data/universe_quantus.txt}
-OUT=${OUT:-$HOME/data}
-# 전략 설정은 저장소 밖에 있다 — 초소형주 레시피는 체크포인트다
-# (`configs/README.md`). 공개 `configs/` 에는 합성 예제 둘만 남는다.
+# 산출물은 처음부터 제 자리에 떨어뜨린다.
+#
+# 예전에는 둘 다 `$HOME/data` 최상위였고, `~/data/README.md` 는 "끝난 뒤
+# logs/·results/ 로 옮긴다" 고 적어두었다. 그 이사를 아무도 하지 않아
+# 최상위에 58개가 쌓였다 (2026-08-17 정리). 사람이 나중에 하기로 한
+# 정리는 하지 않게 된다 — 애초에 옮길 일이 없게 만든다.
+RESULTS=${RESULTS:-$HOME/data/results}
+LOGS=${LOGS:-$HOME/data/logs}
+mkdir -p "$RESULTS" "$LOGS"
+# 전략 설정은 저장소 밖에도 한 벌 있다. 지금은 40개 중 33개가 저장소의
+# `configs/` 와 바이트 단위로 같다 — 감출 이유가 없어진 뒤로도(전부 공개,
+# `configs/README.md`) 사본이 남은 것이다. 저장소 쪽을 쓰려면
+# CONFIGS=$REPO/configs 로 넘긴다.
 CONFIGS=${CONFIGS:-$HOME/data/configs}
 
 # 시작 전에 벤치마크를 확인한다. 없으면 여기서 죽어야 한다.
@@ -37,7 +47,7 @@ run() {
     name=$1
     config=$2
     shift 2
-    if [ -f "$OUT/oos_$name.json" ]; then
+    if [ -f "$RESULTS/oos_$name.json" ]; then
         echo "건너뜀 (이미 있음): $name"
         return
     fi
@@ -47,15 +57,15 @@ run() {
         --space "$CONFIGS/space_small.json" \
         --tickers-file "$UNIVERSE" \
         --method grid --trials 3 --min-train-years 5 --objective calmar \
-        --out "$OUT/oos_$name.json" "$@" > "$OUT/opt_$name.log" 2>&1
+        --out "$RESULTS/oos_$name.json" "$@" > "$LOGS/opt_$name.log" 2>&1
     status=$?
     # 실패를 조용히 넘기지 않는다 — 이 저장소의 지배적 실패 유형이다.
     # OOM 킬은 종료코드 137 로 온다. 이걸 안 보면 다음 작업이 시작되면서
     # "돌고 있다" 는 인상만 남고 결과 파일이 없다는 사실은 몇 시간 뒤에 안다.
     if [ "$status" -ne 0 ]; then
-        echo "!!! $name 실패 (종료코드 $status) — $OUT/opt_$name.log 확인"
+        echo "!!! $name 실패 (종료코드 $status) — $LOGS/opt_$name.log 확인"
     else
-        grep -E "Deflated|OOS Sharpe" "$OUT/opt_$name.log"
+        grep -E "Deflated|OOS Sharpe" "$LOGS/opt_$name.log"
     fi
     echo "=== $name 종료 $(date +%H:%M:%S) ==="
 }
