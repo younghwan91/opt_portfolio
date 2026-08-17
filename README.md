@@ -367,12 +367,30 @@ place pays nothing.** The premise does not match the era. Full diagnosis in the
 > were right and only the risk metrics were wrong, which is why it survived so long.
 > Regression test: `tests/test_risk_annualization.py`.
 
+## Keller fixed it twice himself
+
+VAA's real problem is that **the four offensive assets are both the investment
+universe and the alarm.** Through 2011–2026 `EEM` and `EFA` were chronically weak, so
+**assets there was never any intention of buying pushed the whole portfolio
+defensive.** `SPY` rose throughout.
+
+This diagnosis is not ours — Keller acknowledged the same problem and published
+successors. **That the lineage exists is independent confirmation of the diagnosis.**
+
+| Year | Strategy | What changed | Here |
+|---|---|---|---|
+| 2017 | **VAA** | (the original problem) | implemented as a baseline |
+| 2018 | DAA | **canary universe** — separates the alarm from the investment universe | **not implemented** — the rule source 404'd, and an unverified spec does not get implemented (CLAUDE.md §4) |
+| 2022 | **BAA** | canary + separate offensive set + wider defensive set + different selection metric | **six variants centred here** |
+| 2023 | HAA | built for inflation and rising rates | **not implemented — and no reason was recorded.** The design document listed it in this table and then walked past it |
+
+That last row is this round's loose end. What was skipped is recorded as skipped.
+
 ## So a replacement was built — and rejected too
 
-VAA's disease was not how often it went defensive but **what it bought when it did.**
-So nine configurations, centred on Keller's later BAA (2022) which separates the
-canary (alarm) assets from the investment universe, were **registered before any
-result was seen** and measured in one pass.
+BAA separates the canary (alarm) assets from the investment universe. Centred on it,
+nine configurations were **registered before any result was seen** and measured in
+one pass.
 
 | Configuration | CAGR | Max DD | Calmar | DSR |
 |---|---|---|---|---|
